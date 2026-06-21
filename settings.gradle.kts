@@ -11,7 +11,9 @@ pluginManagement {
 }
 
 plugins {
-    id("org.gradle.toolchains.foojay-resolver-convention") version "0.9.0"
+    // 1.0.0+ is required for Gradle 9: 0.9.0 hard-references JvmVendorSpec.IBM_SEMERU,
+    // which Gradle 9 removed, crashing toolchain resolution (e.g. the 1.12.2 Java 8 toolchain).
+    id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
     id("dev.prism.settings") version "+"
 }
 
