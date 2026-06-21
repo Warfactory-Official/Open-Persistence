@@ -1,0 +1,96 @@
+name: Snapshots
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: write
+
+concurrency:
+  group: snapshots
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build snapshot jars
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: gradle
+
+      - name: Build
+        run: >
+          bash gradlew --no-daemon -PmodVersion=1.0.0-SNAPSHOT
+          :1.12.2:build
+          :1.20.1:fabric:build
+          :1.20.1:forge:build
+          :1.21.1:fabric:build
+          :1.21.1:neoforge:build
+          :26.1:fabric:build
+          :26.1:neoforge:build
+
+      - name: Upload jars
+        uses: actions/upload-artifact@v4
+        with:
+          name: snapshot-jars
+          if-no-files-found: error
+          path: |
+            versions/1.12.2/build/libs/*.jar
+            versions/1.20.1/fabric/build/libs/*.jar
+            versions/1.20.1/forge/build/libs/*.jar
+            versions/1.21.1/fabric/build/libs/*.jar
+            versions/1.21.1/neoforge/build/libs/*.jar
+            versions/26.1/fabric/build/libs/*.jar
+            versions/26.1/neoforge/build/libs/*.jar
+            !versions/**/build/libs/*-dev.jar
+            !versions/**/build/libs/*-sources.jar
+            !versions/**/build/libs/*-javadoc.jar
+
+  publish:
+    name: Publish rolling snapshot release
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download jars
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish snapshots
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SNAPSHOT_TAG: snapshots
+        run: |
+          set -euo pipefail
+
+          mapfile -t jars < <(find dist -type f -name '*.jar' | sort)
+          if [ "${#jars[@]}" -eq 0 ]; then
+            echo "No jars found to publish" >&2
+            exit 1
+          fi
+
+          gh release delete "$SNAPSHOT_TAG" --yes --cleanup-tag || true
+          git push origin ":refs/tags/$SNAPSHOT_TAG" || true
+
+          gh release create "$SNAPSHOT_TAG" "${jars[@]}" \
+            --target "$GITHUB_SHA" \
+            --title "Snapshots" \
+            --notes "Rolling snapshot build of Open Persistence for Minecraft 1.12.2, 1.20.1, 1.21.1 and 26.1 from commit $GITHUB_SHA." \
+            --prerelease

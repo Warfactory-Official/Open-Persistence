@@ -1,0 +1,32 @@
+modLoader = "javafml"
+loaderVersion = "${neoforge_loader_version_range}"
+license = "${license}"
+
+[[mods]]
+modId = "openpersistence"
+version = "${version}"
+displayName = "${mod_name}"
+description = "${description}"
+authors = "${mod_author}"
+
+[[dependencies.openpersistence]]
+modId = "neoforge"
+type = "required"
+versionRange = "[26.1,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.openpersistence]]
+modId = "minecraft"
+type = "required"
+versionRange = "[26.1,)"
+ordering = "NONE"
+side = "BOTH"
+
+# Curios is a soft dependency: if present, load it before us so its slots are ready.
+[[dependencies.openpersistence]]
+modId = "curios"
+type = "optional"
+versionRange = "*"
+ordering = "AFTER"
+side = "BOTH"

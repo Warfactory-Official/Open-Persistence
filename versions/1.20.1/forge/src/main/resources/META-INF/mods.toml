@@ -1,0 +1,32 @@
+modLoader = "javafml"
+loaderVersion = "${forge_loader_version_range}"
+license = "${license}"
+
+[[mods]]
+modId = "openpersistence"
+version = "${version}"
+displayName = "${mod_name}"
+description = "${description}"
+authors = "${mod_author}"
+
+[[dependencies.openpersistence]]
+modId = "forge"
+mandatory = true
+versionRange = "[47,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.openpersistence]]
+modId = "minecraft"
+mandatory = true
+versionRange = "[1.20.1,)"
+ordering = "NONE"
+side = "BOTH"
+
+# Curios is a soft dependency: if present, load it before us so its capabilities are ready.
+[[dependencies.openpersistence]]
+modId = "curios"
+mandatory = false
+versionRange = "*"
+ordering = "AFTER"
+side = "BOTH"
