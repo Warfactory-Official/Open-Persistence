@@ -35,6 +35,44 @@ Accessory/extra-slot mods are integrated as **optional soft dependencies** — O
 - **Curios** (1.20.1+ on Forge/NeoForge) — items in Curios slots are copied onto the body and restored on login. Curios is a Forge/NeoForge-only mod; on **Fabric** there is no Curios integration and accessory handling is a no-op.
 - **ModularWarfare** (1.12.2, Shining fork) — the original mod's extra-slot compatibility is preserved on the legacy build.
 
+### Grave & corpse mods (GraveStone / Corpse)
+
+[GraveStone](https://www.curseforge.com/minecraft/mc-mods/gravestone-mod) and [Corpse](https://www.curseforge.com/minecraft/mc-mods/corpse) (both by henkelmax) save a player's items into a grave block / corpse entity **when a real player dies**. A persistent body is *not* a real player — it is a custom entity — so their player-death hooks never fire for it. Without compat a killed body just scatters its items on the floor, even on a server that has a grave mod installed.
+
+Making **persistent players spawn graves/corpses** therefore needs **explicit compat**: Open Persistence deposits the items into the grave mod itself, on the offline player's behalf. To keep that out of the shared logic, body-death drops go through a `GraveHelper` service (the same `ServiceLoader` soft-dependency pattern as Curios). `onBodyDeath` collects everything the body should drop into one list and calls `Services.GRAVE.deposit(...)`; if no grave mod handles it, the items are scattered on the ground as before.
+
+On Forge/NeoForge the helper detects whichever mod is installed and deposits via its API:
+
+- **Corpse** — builds a corelib `Death` from the recovered items and spawns a `CorpseEntity` at the body's position.
+- **GraveStone** — builds the same `Death`, finds a free spot with `GraveUtils`, places the grave block, and stores the `Death` on its block entity.
+
+Both mods coexist with this (if both are installed, Corpse is preferred). Each support class only references its mod's classes, so a server with neither mod — or only one — never hits a missing-class error. GraveStone/Corpse each shade their own copy of `corelib`, so no separate `corelib` dependency is needed; Corpse is pulled from Modrinth and GraveStone (CurseForge-only) from CurseMaven, both as **compile-only** soft deps.
+
+| | Implementation | Status |
+|---|---|---|
+| **NeoForge** (1.21.1, 26.1) | `NeoForgeGraveHelper` → `CorpseSupport` / `GravestoneSupport` | **Wired** — Corpse and GraveStone both supported. |
+| **Forge** (1.20.1) | `ForgeGraveHelper` → `CorpseSupport` / `GravestoneSupport` | **Wired** — Corpse and GraveStone both supported. |
+| **Fabric** (1.20.1, 1.21.1, 26.1) | `FabricGraveHelper` (no-op) | Neither mod ships for Fabric, so Fabric always scatters. |
+| **1.12.2** (Forge) | `CompatManager.depositGrave(...)` | Seam only — collects items and routes through the hook, which currently scatters (the legacy `corelib` API differs; not yet wired). |
+
+### Testing with two clients locally
+
+The mod only acts on a **dedicated** server (it no-ops in single-player and on a world Opened to LAN, both of which report as single-player), so testing needs a server plus two separately-authenticated clients. **Every** loader target now defines a second client run, **`runClient2`** (logged in as `Player2`, with its own `run/client2` game directory), alongside the default `runClient` — so the two clients get different offline UUIDs. Use any target:
+
+```bash
+JAVA_HOME=/usr/lib/jvm/java-25 ./gradlew :1.21.1:neoforge:runServer    # 1) dedicated dev server
+JAVA_HOME=/usr/lib/jvm/java-25 ./gradlew :1.21.1:neoforge:runClient     # 2) first client
+JAVA_HOME=/usr/lib/jvm/java-25 ./gradlew :1.21.1:neoforge:runClient2    # 3) second client (Player2)
+```
+
+Direct-connect both clients to `localhost`, log out on one (a body spawns where it stood), then kill the body with the other.
+
+On the **Forge/NeoForge** targets (1.20.1, 1.21.1, 26.1) a grave mod (Corpse) is also loaded into the dev runs via `modRuntimeOnly` — dev-only, **not** bundled into the shipped jar — so killing the body produces a corpse/grave holding that player's inventory. Swap the commented `modRuntimeOnly` line in `build.gradle.kts` to test GraveStone instead. On **Fabric** (no grave mod exists) and **1.12.2** (grave compat is seam-only) there is no grave mod in dev, so `runClient2` exercises the body mechanic itself (the items scatter).
+
+**Launching from an IDE (IntelliJ/Eclipse):** ModDevGradle generates each run's launch argfiles during the IDE's Gradle **sync**, so after pulling these changes **re-sync Gradle once** before running `client2` from the IDE — otherwise the run config points at a `client2RunVmArgs.txt` that doesn't exist yet and the JVM reports `Could not find or load main class @…client2RunVmArgs.txt`. The `runClient2` Gradle task never has this problem (it regenerates the argfiles itself), so it always works from the terminal.
+
+> Implementation note: the second client is wired through each loader's own run system (ModDevGradle's `runs` container for NeoForge/Forge, Loom's for Fabric, and a clone of RetroFuturaGradle's `runClient` task for 1.12.2) via Prism's `rawProject` escape hatch, because Prism's cross-loader `runs {}` DSL mis-handles these in the current version. On NeoForge/Forge the `client2` run is also registered with MDG's `neoForgeIdeSync` task (via `IdeIntegration.runTaskOnProjectSync`) so its argfiles regenerate on IDE sync like the built-in runs.
+
 ## Configuration
 
 | Option | Default | Description |

@@ -30,7 +30,9 @@ import net.minecraft.util.text.TextComponentString;
 import net.minecraft.world.World;
 import net.minecraftforge.common.util.ITeleporter;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.UUID;
 
 import static com.norwood.openpersistence.compat.CompatManager.ID_MW;
@@ -119,6 +121,8 @@ public class EntityPersistentPlayer extends EntityCreature {
     public void onDeath(DamageSource cause) {
         super.onDeath(cause);
 
+
+        List<ItemStack> drops = new ArrayList<>();
         CommonProxy.PLAYER_EVENTS.updatePersistentPlayerLocation(this, p -> {
             p.setHealth(0F);
             if (CompatManager.isLoaded(ID_MW)) {
@@ -128,12 +132,22 @@ public class EntityPersistentPlayer extends EntityCreature {
             for (int i = 0; i < p.inventory.getSizeInventory(); i++) {
                 ItemStack stackInSlot = p.inventory.getStackInSlot(i);
                 p.inventory.removeStackFromSlot(i);
-                entityDropItem(stackInSlot, 0F);
+                if (!stackInSlot.isEmpty()) {
+                    drops.add(stackInSlot);
+                }
             }
             if (Config.DEBUG) {
                 Logger.info("Persistent player killed");
             }
         });
+        UUID uuid = getPlayerUUID().isPresent() ? getPlayerUUID().get() : null;
+        boolean stored = uuid != null
+                && CompatManager.depositGrave(world, posX, posY, posZ, uuid, getPlayerName(), drops);
+        if (!stored) {
+            for (ItemStack stack : drops) {
+                entityDropItem(stack, 0F);
+            }
+        }
     }
 
     @Override

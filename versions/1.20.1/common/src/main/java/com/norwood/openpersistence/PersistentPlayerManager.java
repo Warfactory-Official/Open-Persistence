@@ -16,6 +16,8 @@ import net.minecraft.world.level.storage.LevelResource;
 
 import java.io.File;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -110,13 +112,15 @@ public final class PersistentPlayerManager {
 
     /** Called by the entity when its body is killed: drop the player's gear and zero their save. */
     public static void onBodyDeath(PersistentPlayerEntity body) {
-        if (!(body.level() instanceof ServerLevel)) {
+        if (!(body.level() instanceof ServerLevel serverLevel)) {
             return;
         }
-        // Drop the curio snapshot taken at logout, right where the body fell.
+        // Gather everything the body should drop into one list: the curio snapshot taken at logout,
+        // plus the offline player's saved inventory (which we also empty + write back so the loss sticks).
+        List<ItemStack> drops = new ArrayList<>();
         for (ItemStack stack : body.getExtraItems()) {
             if (!stack.isEmpty()) {
-                body.spawnAtLocation(stack.copy());
+                drops.add(stack.copy());
             }
         }
         body.getExtraItems().clear();
@@ -128,14 +132,23 @@ public final class PersistentPlayerManager {
             for (int i = 0; i < inventory.getContainerSize(); i++) {
                 ItemStack stack = inventory.getItem(i);
                 if (!stack.isEmpty()) {
-                    body.spawnAtLocation(stack.copy());
+                    drops.add(stack.copy());
                     inventory.setItem(i, ItemStack.EMPTY);
                 }
             }
             if (OpenPersistenceConfig.debug) {
-                Openpersistence.LOGGER.info("Persistent body for {} killed; inventory dropped", body.getPlayerName());
+                Openpersistence.LOGGER.info("Persistent body for {} killed; {} stacks recovered", body.getPlayerName(), drops.size());
             }
         });
+
+        UUID playerUUID = body.getPlayerUUID().orElse(null);
+        boolean stored = playerUUID != null && Services.GRAVE.deposit(
+                serverLevel, body.getX(), body.getY(), body.getZ(), playerUUID, body.getPlayerName(), drops);
+        if (!stored) {
+            for (ItemStack stack : drops) {
+                body.spawnAtLocation(stack);
+            }
+        }
     }
 
     /**

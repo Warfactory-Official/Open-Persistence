@@ -1,0 +1,49 @@
+name: Feature request / compatibility request
+description: Suggest a feature, or request compatibility with another mod
+title: "[Request]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for feature ideas and mod-compatibility requests (e.g. "make persistent bodies work
+        with mod X"). For grave/corpse-style mods, see the open compatibility work in the README first.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: What would you like?
+      description: Describe the feature or the mod you'd like Open Persistence to be compatible with.
+    validations:
+      required: true
+
+  - type: input
+    id: mod-link
+    attributes:
+      label: Mod link (for compatibility requests)
+      description: CurseForge / Modrinth / GitHub link to the mod you want compatibility with.
+      placeholder: "https://www.curseforge.com/minecraft/mc-mods/..."
+    validations:
+      required: false
+
+  - type: dropdown
+    id: mc-version
+    attributes:
+      label: Which Minecraft version(s) does this concern?
+      multiple: true
+      options:
+        - "1.12.2"
+        - "1.20.1"
+        - "1.21.1"
+        - "26.1"
+        - "All / not version-specific"
+    validations:
+      required: true
+
+  - type: textarea
+    id: details
+    attributes:
+      label: Additional context
+      description: Why is this useful? How do you imagine it working?
+    validations:
+      required: false

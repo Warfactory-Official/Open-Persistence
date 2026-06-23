@@ -2,6 +2,7 @@ package com.norwood.openpersistence.platform;
 
 import com.norwood.openpersistence.Openpersistence;
 import com.norwood.openpersistence.platform.services.CuriosHelper;
+import com.norwood.openpersistence.platform.services.GraveHelper;
 import com.norwood.openpersistence.platform.services.IPlatformHelper;
 
 import java.util.ServiceLoader;
@@ -15,6 +16,7 @@ public final class Services {
 
     public static final IPlatformHelper PLATFORM = load(IPlatformHelper.class);
     public static final CuriosHelper CURIOS = load(CuriosHelper.class);
+    public static final GraveHelper GRAVE = load(GraveHelper.class);
 
     private Services() {
     }

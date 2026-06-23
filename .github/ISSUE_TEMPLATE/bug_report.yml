@@ -1,0 +1,123 @@
+name: Bug report
+description: Report a bug or unexpected behaviour in Open Persistence
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a report! The **version**, **loader**, **server type** and
+        **other mods** fields below are the ones we need most to reproduce an issue — please fill them in.
+
+  - type: input
+    id: mod-version
+    attributes:
+      label: Open Persistence version
+      description: >
+        The exact jar version from your `mods` folder, e.g.
+        `openpersistence-1.21.1-NeoForge-1.0.0.jar`. Please use a release jar, not a self-built one,
+        unless your report is about building from source.
+      placeholder: "1.0.0  (openpersistence-1.21.1-NeoForge-1.0.0.jar)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mc-version
+    attributes:
+      label: Minecraft version
+      description: Which Minecraft version are you running Open Persistence on?
+      options:
+        - "1.12.2"
+        - "1.20.1"
+        - "1.21.1"
+        - "26.1"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: loader
+    attributes:
+      label: Modding environment / loader
+      description: >
+        Which mod loader are you running? Download the jar that matches **both** your Minecraft
+        version and your loader. (1.12.2 = Forge only · 1.20.1 = Forge or Fabric ·
+        1.21.1 / 26.1 = NeoForge or Fabric.)
+      options:
+        - "Forge"
+        - "Fabric"
+        - "NeoForge"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: server-type
+    attributes:
+      label: Server type
+      description: >
+        Open Persistence only does anything in **multiplayer**. Which kind of server were you on?
+        This matters: a single-player world that you "Open to LAN" still reports itself as
+        single-player to some hooks, so persistent bodies may behave differently there than on a
+        standalone (dedicated) server. Please be precise.
+      options:
+        - "Dedicated server (standalone server jar)"
+        - "Integrated server, Open to LAN (single-player world shared to LAN)"
+        - "Single player (no LAN) — note: the mod intentionally does nothing here"
+    validations:
+      required: true
+
+  - type: textarea
+    id: other-mods
+    attributes:
+      label: Other mods installed
+      description: >
+        List the other mods (with versions) in your instance. **Accessory mods** (Curios / Trinkets)
+        and **grave / corpse mods** (GraveStone, Corpse) are especially relevant — please always
+        mention them if present. Pasting your full mod list is ideal.
+      placeholder: |
+        - Curios 9.5.1+1.21.1
+        - Corpse 1.21.1-1.0.x
+        - GraveStone 1.21.1-1.0.24
+        - ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, including what you expected to happen instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Join a dedicated server with Open Persistence installed
+        2. Log out
+        3. Have another player kill the persistent body
+        4. Log back in — observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / crash report
+      description: >
+        Paste or attach the relevant `latest.log` and any crash report. If the issue only happens
+        with another mod installed, logs from a run with `debug = true` set in the config help a lot.
+      render: text
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Before submitting
+      options:
+        - label: I am using the jar that matches **both** my Minecraft version and my loader.
+          required: true
+        - label: I searched the existing issues and did not find a duplicate.
+          required: true

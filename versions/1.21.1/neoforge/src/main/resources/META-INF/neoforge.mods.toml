@@ -30,3 +30,18 @@ type = "optional"
 versionRange = "*"
 ordering = "AFTER"
 side = "BOTH"
+
+# Corpse / GraveStone are optional: if present, killed persistent bodies deposit into them.
+[[dependencies.openpersistence]]
+modId = "corpse"
+type = "optional"
+versionRange = "*"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.openpersistence]]
+modId = "gravestone"
+type = "optional"
+versionRange = "*"
+ordering = "AFTER"
+side = "BOTH"
