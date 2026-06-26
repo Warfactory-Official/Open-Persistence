@@ -136,6 +136,24 @@ fun org.gradle.api.Project.configureOfflineServer() {
     }
 }
 
+
+run {
+    val root = rootProject
+    val globalOverride = root.findProperty("modVersion") as String?
+    gradle.projectsEvaluated {
+        root.subprojects.forEach { sub ->
+            val mc = if (sub.parent == root) sub.name else sub.parent?.name
+            val resolved = globalOverride ?: (mc?.let { root.findProperty("version.$it") as String? })
+            if (resolved != null) {
+                sub.version = resolved
+                sub.tasks.withType(AbstractArchiveTask::class.java).configureEach {
+                    archiveVersion.set(resolved)
+                }
+            }
+        }
+    }
+}
+
 prism {
     metadata {
         modId = "openpersistence"

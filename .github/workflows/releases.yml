@@ -1,12 +1,9 @@
 name: Point Releases
 
+
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: "Point release version, for example 1.0.1 or v1.0.1"
-        required: true
-        type: string
       release_type:
         description: "Release channel for CurseForge and Modrinth"
         required: true
@@ -17,30 +14,40 @@ on:
           - beta
           - alpha
       changelog:
-        description: "Optional release notes. If blank, commit subjects since the previous tag are used."
+        description: "Optional release notes shared by every target published this run. Blank uses a generated note."
         required: false
         type: string
-  push:
-    tags:
-      - "v*.*.*"
-      - "*.*.*"
 
 permissions:
   contents: write
 
 concurrency:
-  group: point-release-${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
+  group: point-release
   cancel-in-progress: false
 
 jobs:
-  build:
-    name: Build release jars
+  publish:
+    name: ${{ matrix.mc }} ${{ matrix.loader_name }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
-    outputs:
-      release_version: ${{ steps.release.outputs.version }}
-      release_tag: ${{ steps.release.outputs.tag }}
-      release_type: ${{ steps.release.outputs.type }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { mc: "1.12.2", loader: forge,    loader_name: Forge,    project: ":1.12.2",          libs: "versions/1.12.2/build/libs",          java: 8,  game_versions: "1.12.2" }
+          - { mc: "1.20.1", loader: fabric,   loader_name: Fabric,   project: ":1.20.1:fabric",   libs: "versions/1.20.1/fabric/build/libs",   java: 17, game_versions: "1.20.1" }
+          - { mc: "1.20.1", loader: forge,    loader_name: Forge,    project: ":1.20.1:forge",    libs: "versions/1.20.1/forge/build/libs",    java: 17, game_versions: "1.20.1" }
+          - { mc: "1.21.1", loader: fabric,   loader_name: Fabric,   project: ":1.21.1:fabric",   libs: "versions/1.21.1/fabric/build/libs",   java: 21, game_versions: "1.21.1" }
+          - { mc: "1.21.1", loader: neoforge, loader_name: NeoForge, project: ":1.21.1:neoforge", libs: "versions/1.21.1/neoforge/build/libs", java: 21, game_versions: "1.21.1" }
+          - { mc: "26.1",   loader: fabric,   loader_name: Fabric,   project: ":26.1:fabric",     libs: "versions/26.1/fabric/build/libs",     java: 21, game_versions: "26.1" }
+          - { mc: "26.1",   loader: neoforge, loader_name: NeoForge, project: ":26.1:neoforge",   libs: "versions/26.1/neoforge/build/libs",   java: 21, game_versions: "26.1" }
+
+    env:
+      CURSEFORGE_PROJECT_ID: ${{ vars.CURSEFORGE_PROJECT_ID }}
+      MODRINTH_PROJECT_ID: ${{ vars.MODRINTH_PROJECT_ID }}
+      RELEASE_TYPE: ${{ inputs.release_type }}
 
     steps:
       - name: Checkout
@@ -48,292 +55,171 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "25"
-          cache: gradle
-
-      - name: Resolve release metadata
-        id: release
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          RAW_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
-          RELEASE_TYPE: ${{ github.event_name == 'workflow_dispatch' && inputs.release_type || 'release' }}
-          CHANGELOG_INPUT: ${{ github.event_name == 'workflow_dispatch' && inputs.changelog || '' }}
-        run: |
-          set -euo pipefail
-
-          version="${RAW_VERSION#v}"
-          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Release version must be a point release in X.Y.Z form, got '$RAW_VERSION'." >&2
-            exit 1
-          fi
-
-          case "$RELEASE_TYPE" in
-            release|beta|alpha) ;;
-            *)
-              echo "Invalid release type '$RELEASE_TYPE'." >&2
-              exit 1
-              ;;
-          esac
-
-          if [ "$EVENT_NAME" = "push" ]; then
-            tag="$RAW_VERSION"
-          else
-            tag="v$version"
-          fi
-          {
-            echo "version=$version"
-            echo "tag=$tag"
-            echo "type=$RELEASE_TYPE"
-          } >> "$GITHUB_OUTPUT"
-
-          mkdir -p dist
-          if [ -n "$CHANGELOG_INPUT" ]; then
-            printf '%s\n' "$CHANGELOG_INPUT" > dist/release-notes.md
-          else
-            previous_tag="$(git tag --sort=-v:refname | grep -Fxv "$tag" | head -n 1 || true)"
-            {
-              echo "Open Persistence $version"
-              echo
-              if [ -n "$previous_tag" ]; then
-                git log --pretty=format:'- %s (%h)' "$previous_tag"..HEAD
-              else
-                git log --pretty=format:'- %s (%h)' HEAD
-              fi
-            } > dist/release-notes.md
-          fi
-
-      - name: Build
-        run: >
-          bash gradlew --no-daemon -PmodVersion=${{ steps.release.outputs.version }}
-          :1.12.2:build
-          :1.20.1:fabric:build
-          :1.20.1:forge:build
-          :1.21.1:fabric:build
-          :1.21.1:neoforge:build
-          :26.1:fabric:build
-          :26.1:neoforge:build
-
-      - name: Stage release jars
-        env:
-          RELEASE_VERSION: ${{ steps.release.outputs.version }}
-        run: |
-          set -euo pipefail
-
-          artifacts=(
-            "versions/1.12.2/build/libs/openpersistence-1.12.2-Forge-${RELEASE_VERSION}.jar"
-            "versions/1.20.1/fabric/build/libs/openpersistence-1.20.1-Fabric-${RELEASE_VERSION}.jar"
-            "versions/1.20.1/forge/build/libs/openpersistence-1.20.1-Forge-${RELEASE_VERSION}.jar"
-            "versions/1.21.1/fabric/build/libs/openpersistence-1.21.1-Fabric-${RELEASE_VERSION}.jar"
-            "versions/1.21.1/neoforge/build/libs/openpersistence-1.21.1-NeoForge-${RELEASE_VERSION}.jar"
-            "versions/26.1/fabric/build/libs/openpersistence-26.1-Fabric-${RELEASE_VERSION}.jar"
-            "versions/26.1/neoforge/build/libs/openpersistence-26.1-NeoForge-${RELEASE_VERSION}.jar"
-          )
-
-          for artifact in "${artifacts[@]}"; do
-            if [ ! -f "$artifact" ]; then
-              echo "Expected release jar was not produced: $artifact" >&2
-              exit 1
-            fi
-            cp "$artifact" dist/
-          done
-
-      - name: Upload release artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: point-release
-          if-no-files-found: error
-          path: |
-            dist/*.jar
-            dist/release-notes.md
-
-  publish:
-    name: Publish release
-    runs-on: ubuntu-latest
-    needs: build
-
-    env:
-      RELEASE_VERSION: ${{ needs.build.outputs.release_version }}
-      RELEASE_TAG: ${{ needs.build.outputs.release_tag }}
-      RELEASE_TYPE: ${{ needs.build.outputs.release_type }}
-      CURSEFORGE_PROJECT_ID: ${{ vars.CURSEFORGE_PROJECT_ID }}
-      MODRINTH_PROJECT_ID: ${{ vars.MODRINTH_PROJECT_ID }}
-
-    steps:
-      - name: Download release artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: point-release
-          path: dist
-
       - name: Validate publishing configuration
         env:
           CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+          CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
           MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
         run: |
           set -euo pipefail
-
           missing=()
           [ -n "$CURSEFORGE_PROJECT_ID" ] || missing+=("repository variable CURSEFORGE_PROJECT_ID")
           [ -n "$MODRINTH_PROJECT_ID" ] || missing+=("repository variable MODRINTH_PROJECT_ID")
-          [ -n "$CURSEFORGE_TOKEN" ] || missing+=("secret CURSEFORGE_TOKEN")
+          [ -n "$CURSEFORGE_TOKEN" ] || missing+=("secret CURSEFORGE_TOKEN (upload token)")
+          [ -n "$CURSEFORGE_API_KEY" ] || missing+=("secret CURSEFORGE_API_KEY (read key, https://console.curseforge.com)")
           [ -n "$MODRINTH_TOKEN" ] || missing+=("secret MODRINTH_TOKEN")
-
           if [ "${#missing[@]}" -gt 0 ]; then
             printf 'Missing required publishing configuration:\n' >&2
             printf ' - %s\n' "${missing[@]}" >&2
             exit 1
           fi
 
-      - name: Publish 1.12.2 Forge
-        uses: Kira-NT/mc-publish@v3.3.0
-        with:
-          curseforge-id: ${{ env.CURSEFORGE_PROJECT_ID }}
-          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
-          modrinth-id: ${{ env.MODRINTH_PROJECT_ID }}
-          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
-          files: dist/openpersistence-1.12.2-Forge-${{ env.RELEASE_VERSION }}.jar
-          name: Open Persistence ${{ env.RELEASE_VERSION }} for Minecraft 1.12.2 Forge
-          curseforge-version: ${{ env.RELEASE_VERSION }}
-          modrinth-version: ${{ env.RELEASE_VERSION }}+mc1.12.2-forge
-          version-type: ${{ env.RELEASE_TYPE }}
-          changelog-file: dist/release-notes.md
-          loaders: forge
-          game-versions: 1.12.2
-          java: 8
-          retry-attempts: 3
-          retry-delay: 10000
-
-      - name: Publish 1.20.1 Fabric
-        uses: Kira-NT/mc-publish@v3.3.0
-        with:
-          curseforge-id: ${{ env.CURSEFORGE_PROJECT_ID }}
-          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
-          modrinth-id: ${{ env.MODRINTH_PROJECT_ID }}
-          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
-          files: dist/openpersistence-1.20.1-Fabric-${{ env.RELEASE_VERSION }}.jar
-          name: Open Persistence ${{ env.RELEASE_VERSION }} for Minecraft 1.20.1 Fabric
-          curseforge-version: ${{ env.RELEASE_VERSION }}
-          modrinth-version: ${{ env.RELEASE_VERSION }}+mc1.20.1-fabric
-          version-type: ${{ env.RELEASE_TYPE }}
-          changelog-file: dist/release-notes.md
-          loaders: fabric
-          game-versions: 1.20.1
-          java: 17
-          retry-attempts: 3
-          retry-delay: 10000
-
-      - name: Publish 1.20.1 Forge
-        uses: Kira-NT/mc-publish@v3.3.0
-        with:
-          curseforge-id: ${{ env.CURSEFORGE_PROJECT_ID }}
-          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
-          modrinth-id: ${{ env.MODRINTH_PROJECT_ID }}
-          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
-          files: dist/openpersistence-1.20.1-Forge-${{ env.RELEASE_VERSION }}.jar
-          name: Open Persistence ${{ env.RELEASE_VERSION }} for Minecraft 1.20.1 Forge
-          curseforge-version: ${{ env.RELEASE_VERSION }}
-          modrinth-version: ${{ env.RELEASE_VERSION }}+mc1.20.1-forge
-          version-type: ${{ env.RELEASE_TYPE }}
-          changelog-file: dist/release-notes.md
-          loaders: forge
-          game-versions: 1.20.1
-          java: 17
-          retry-attempts: 3
-          retry-delay: 10000
-
-      - name: Publish 1.21.1 NeoForge
-        uses: Kira-NT/mc-publish@v3.3.0
-        with:
-          curseforge-id: ${{ env.CURSEFORGE_PROJECT_ID }}
-          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
-          modrinth-id: ${{ env.MODRINTH_PROJECT_ID }}
-          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
-          files: dist/openpersistence-1.21.1-NeoForge-${{ env.RELEASE_VERSION }}.jar
-          name: Open Persistence ${{ env.RELEASE_VERSION }} for Minecraft 1.21.1 NeoForge
-          curseforge-version: ${{ env.RELEASE_VERSION }}
-          modrinth-version: ${{ env.RELEASE_VERSION }}+mc1.21.1-neoforge
-          version-type: ${{ env.RELEASE_TYPE }}
-          changelog-file: dist/release-notes.md
-          loaders: neoforge
-          game-versions: 1.21.1
-          java: 21
-          retry-attempts: 3
-          retry-delay: 10000
-
-      - name: Publish 1.21.1 Fabric
-        uses: Kira-NT/mc-publish@v3.3.0
-        with:
-          curseforge-id: ${{ env.CURSEFORGE_PROJECT_ID }}
-          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
-          modrinth-id: ${{ env.MODRINTH_PROJECT_ID }}
-          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
-          files: dist/openpersistence-1.21.1-Fabric-${{ env.RELEASE_VERSION }}.jar
-          name: Open Persistence ${{ env.RELEASE_VERSION }} for Minecraft 1.21.1 Fabric
-          curseforge-version: ${{ env.RELEASE_VERSION }}
-          modrinth-version: ${{ env.RELEASE_VERSION }}+mc1.21.1-fabric
-          version-type: ${{ env.RELEASE_TYPE }}
-          changelog-file: dist/release-notes.md
-          loaders: fabric
-          game-versions: 1.21.1
-          java: 21
-          retry-attempts: 3
-          retry-delay: 10000
-
-      - name: Publish 26.1 NeoForge
-        uses: Kira-NT/mc-publish@v3.3.0
-        with:
-          curseforge-id: ${{ env.CURSEFORGE_PROJECT_ID }}
-          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
-          modrinth-id: ${{ env.MODRINTH_PROJECT_ID }}
-          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
-          files: dist/openpersistence-26.1-NeoForge-${{ env.RELEASE_VERSION }}.jar
-          name: Open Persistence ${{ env.RELEASE_VERSION }} for Minecraft 26.1 NeoForge
-          curseforge-version: ${{ env.RELEASE_VERSION }}
-          modrinth-version: ${{ env.RELEASE_VERSION }}+mc26.1-neoforge
-          version-type: ${{ env.RELEASE_TYPE }}
-          changelog-file: dist/release-notes.md
-          loaders: neoforge
-          game-versions: "26.1"
-          java: 21
-          retry-attempts: 3
-          retry-delay: 10000
-
-      - name: Publish 26.1 Fabric
-        uses: Kira-NT/mc-publish@v3.3.0
-        with:
-          curseforge-id: ${{ env.CURSEFORGE_PROJECT_ID }}
-          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
-          modrinth-id: ${{ env.MODRINTH_PROJECT_ID }}
-          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
-          files: dist/openpersistence-26.1-Fabric-${{ env.RELEASE_VERSION }}.jar
-          name: Open Persistence ${{ env.RELEASE_VERSION }} for Minecraft 26.1 Fabric
-          curseforge-version: ${{ env.RELEASE_VERSION }}
-          modrinth-version: ${{ env.RELEASE_VERSION }}+mc26.1-fabric
-          version-type: ${{ env.RELEASE_TYPE }}
-          changelog-file: dist/release-notes.md
-          loaders: fabric
-          game-versions: "26.1"
-          java: 21
-          retry-attempts: 3
-          retry-delay: 10000
-
-      - name: Create GitHub release
+      - name: Resolve target version
+        id: ver
         env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
+          MC: ${{ matrix.mc }}
+        run: |
+          set -euo pipefail
+          mc_esc=$(printf '%s' "$MC" | sed 's/\./\\./g')
+          version=$(sed -nE "s/^[[:space:]]*version\.${mc_esc}[[:space:]]*=[[:space:]]*([^[:space:]#]+).*/\1/p" gradle.properties | head -n1)
+          if [ -z "$version" ]; then
+            echo "No 'version.$MC' entry found in gradle.properties." >&2
+            exit 1
+          fi
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "version.$MC must be X.Y.Z, got '$version'." >&2
+            exit 1
+          fi
+          {
+            echo "version=$version"
+            echo "jar=openpersistence-${MC}-${{ matrix.loader_name }}-${version}.jar"
+            echo "mr_version=${version}+mc${MC}-${{ matrix.loader }}"
+            echo "tag=${MC}-${{ matrix.loader }}-v${version}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Check existing releases
+        id: dedup
+        env:
+          CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
+          MR_VERSION: ${{ steps.ver.outputs.mr_version }}
+          JAR: ${{ steps.ver.outputs.jar }}
         run: |
           set -euo pipefail
 
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            echo "GitHub release '$RELEASE_TAG' already exists." >&2
+          # Modrinth is keyed by version_number, which we make unique per target (<ver>+mc<mc>-<loader>).
+          # No `|| true`: a failed lookup aborts the job rather than risk a duplicate upload.
+          mr_list=$(curl -fsSL "https://api.modrinth.com/v2/project/${MODRINTH_PROJECT_ID}/version" \
+            | jq -r '.[].version_number')
+          if printf '%s\n' "$mr_list" | grep -Fxq "$MR_VERSION"; then mr_have=yes; else mr_have=no; fi
+
+          # CurseForge has no version_number; the file name (which embeds mc + loader + version) is the
+          # unique key. The upload token can't read files, so this uses the separate Core API key and
+          # pages through the mod's files.
+          cf_have=no
+          index=0
+          while :; do
+            page=$(curl -fsSL -H "x-api-key: ${CURSEFORGE_API_KEY}" \
+              "https://api.curseforge.com/v1/mods/${CURSEFORGE_PROJECT_ID}/files?pageSize=50&index=${index}")
+            names=$(echo "$page" | jq -r '.data[].fileName')
+            if printf '%s\n' "$names" | grep -Fxq "$JAR"; then cf_have=yes; break; fi
+            count=$(echo "$page" | jq '.data | length')
+            [ "$count" -lt 50 ] && break
+            index=$((index + 50))
+            [ "$index" -ge 2000 ] && break
+          done
+
+          publish_mr=$([ "$mr_have" = no ] && echo true || echo false)
+          publish_cf=$([ "$cf_have" = no ] && echo true || echo false)
+          {
+            echo "publish_mr=$publish_mr"
+            echo "publish_cf=$publish_cf"
+          } >> "$GITHUB_OUTPUT"
+
+          if [ "$publish_mr" = false ] && [ "$publish_cf" = false ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Skipped::${{ matrix.mc }} ${{ matrix.loader_name }} ${{ steps.ver.outputs.version }} is already on both CurseForge and Modrinth."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Publishing::${{ matrix.mc }} ${{ matrix.loader_name }} ${{ steps.ver.outputs.version }} -> Modrinth=$publish_mr CurseForge=$publish_cf"
+          fi
+
+      - name: Set up Java
+        if: steps.dedup.outputs.skip != 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: gradle
+
+      - name: Build
+        if: steps.dedup.outputs.skip != 'true'
+        run: bash gradlew --no-daemon ${{ matrix.project }}:build
+
+      - name: Verify jar
+        if: steps.dedup.outputs.skip != 'true'
+        env:
+          JAR_PATH: ${{ matrix.libs }}/${{ steps.ver.outputs.jar }}
+        run: |
+          set -euo pipefail
+          if [ ! -f "$JAR_PATH" ]; then
+            echo "Expected release jar was not produced: $JAR_PATH" >&2
+            ls -la "${{ matrix.libs }}" || true
             exit 1
           fi
 
-          gh release create "$RELEASE_TAG" dist/*.jar \
-            --target "$GITHUB_SHA" \
-            --title "Open Persistence $RELEASE_VERSION" \
-            --notes-file dist/release-notes.md
+      - name: Release notes
+        if: steps.dedup.outputs.skip != 'true'
+        env:
+          CHANGELOG_INPUT: ${{ inputs.changelog }}
+          MC: ${{ matrix.mc }}
+          LOADER_NAME: ${{ matrix.loader_name }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          if [ -n "$CHANGELOG_INPUT" ]; then
+            printf '%s\n' "$CHANGELOG_INPUT" > dist/notes.md
+          else
+            printf 'Open Persistence %s for Minecraft %s %s.\n' "$VERSION" "$MC" "$LOADER_NAME" > dist/notes.md
+          fi
+
+      - name: Publish to CurseForge / Modrinth
+        if: steps.dedup.outputs.skip != 'true'
+        uses: Kira-NT/mc-publish@v3.3.0
+        with:
+          # An empty id makes mc-publish skip that platform, so a target already present on one
+          # platform is only uploaded to the other.
+          curseforge-id: ${{ steps.dedup.outputs.publish_cf == 'true' && env.CURSEFORGE_PROJECT_ID || '' }}
+          curseforge-token: ${{ steps.dedup.outputs.publish_cf == 'true' && secrets.CURSEFORGE_TOKEN || '' }}
+          modrinth-id: ${{ steps.dedup.outputs.publish_mr == 'true' && env.MODRINTH_PROJECT_ID || '' }}
+          modrinth-token: ${{ steps.dedup.outputs.publish_mr == 'true' && secrets.MODRINTH_TOKEN || '' }}
+          files: ${{ matrix.libs }}/${{ steps.ver.outputs.jar }}
+          name: Open Persistence ${{ steps.ver.outputs.version }} for Minecraft ${{ matrix.mc }} ${{ matrix.loader_name }}
+          curseforge-version: ${{ steps.ver.outputs.version }}
+          modrinth-version: ${{ steps.ver.outputs.mr_version }}
+          version-type: ${{ env.RELEASE_TYPE }}
+          changelog-file: dist/notes.md
+          loaders: ${{ matrix.loader }}
+          game-versions: "${{ matrix.game_versions }}"
+          java: ${{ matrix.java }}
+          retry-attempts: 3
+          retry-delay: 10000
+
+      - name: GitHub release
+        if: steps.dedup.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ steps.ver.outputs.tag }}
+          TITLE: Open Persistence ${{ steps.ver.outputs.version }} (${{ matrix.mc }} ${{ matrix.loader_name }})
+          JAR_PATH: ${{ matrix.libs }}/${{ steps.ver.outputs.jar }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$JAR_PATH" --clobber
+          else
+            gh release create "$TAG" "$JAR_PATH" \
+              --target "$GITHUB_SHA" \
+              --title "$TITLE" \
+              --notes-file dist/notes.md
+          fi
