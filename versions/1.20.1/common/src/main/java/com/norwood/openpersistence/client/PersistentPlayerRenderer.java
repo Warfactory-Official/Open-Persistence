@@ -1,6 +1,8 @@
 package com.norwood.openpersistence.client;
 
 import com.mojang.authlib.GameProfile;
+import com.mojang.authlib.minecraft.MinecraftProfileTexture;
+import com.mojang.authlib.properties.Property;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import com.norwood.openpersistence.entity.PersistentPlayerEntity;
@@ -88,8 +90,7 @@ public class PersistentPlayerRenderer extends LivingEntityRenderer<PersistentPla
                 return info.getSkinLocation();
             }
         }
-        GameProfile profile = new GameProfile(uuid, entity.getPlayerName());
-        return minecraft.getSkinManager().getInsecureSkinLocation(profile);
+        return minecraft.getSkinManager().getInsecureSkinLocation(profileWithSkin(entity, uuid));
     }
 
     private static boolean isSlim(PersistentPlayerEntity entity) {
@@ -101,6 +102,26 @@ public class PersistentPlayerRenderer extends LivingEntityRenderer<PersistentPla
                 return "slim".equals(info.getModelName());
             }
         }
+        MinecraftProfileTexture skin = minecraft.getSkinManager()
+                .getInsecureSkinInformation(profileWithSkin(entity, uuid))
+                .get(MinecraftProfileTexture.Type.SKIN);
+        if (skin != null) {
+            return "slim".equals(skin.getMetadata("model"));
+        }
         return "slim".equals(DefaultPlayerSkin.getSkinModelName(uuid));
+    }
+
+    /** Rebuilds the player's {@link GameProfile}, re-attaching the {@code textures} property captured
+     *  at logout. Without the property the insecure-skin lookup only sees a bare uuid/name and returns
+     *  the default skin — which is why a logged-out body otherwise loses its skin. */
+    private static GameProfile profileWithSkin(PersistentPlayerEntity entity, UUID uuid) {
+        GameProfile profile = new GameProfile(uuid, entity.getPlayerName());
+        String value = entity.getSkinTexture();
+        if (!value.isEmpty()) {
+            String signature = entity.getSkinSignature();
+            profile.getProperties().put("textures",
+                    new Property("textures", value, signature.isEmpty() ? null : signature));
+        }
+        return profile;
     }
 }

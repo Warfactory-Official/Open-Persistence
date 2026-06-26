@@ -48,6 +48,30 @@ public final class PersistentPlayerManager {
         }
     }
 
+    /**
+     * Driven by the body's own server tick. The login event removes the body when it is already
+     * loaded, but if the owner rejoined before their chunk (and the body in it) finished loading,
+     * that event ran too early and missed it — leaving a body that can be killed while the owner is
+     * back online, duplicating their items. Removing the body as soon as it ticks with its owner
+     * online closes that window on every loader.
+     */
+    public static void onBodyTick(PersistentPlayerEntity body) {
+        if (!(body.level() instanceof ServerLevel level)) {
+            return;
+        }
+        MinecraftServer server = level.getServer();
+        if (server == null || server.isSingleplayer()) {
+            return;
+        }
+        body.getPlayerUUID().ifPresent(uuid -> {
+            ServerPlayer owner = server.getPlayerList().getPlayer(uuid);
+            if (owner != null) {
+                restorePlayer(body, owner);
+                body.discard();
+            }
+        });
+    }
+
     public static void onPlayerLogout(ServerPlayer player) {
         if (!canPersist(player)) {
             return;
@@ -113,6 +137,14 @@ public final class PersistentPlayerManager {
     /** Called by the entity when its body is killed: drop the player's gear and zero their save. */
     public static void onBodyDeath(PersistentPlayerEntity body) {
         if (!(body.level() instanceof ServerLevel serverLevel)) {
+            return;
+        }
+        // Dupe guard: if the owner is already back online they still hold their inventory, so dropping
+        // the body's saved copy would duplicate it. The body removes itself on rejoin (onBodyTick);
+        // this covers the race where it is killed in the tick before that happens.
+        UUID ownerUUID = body.getPlayerUUID().orElse(null);
+        if (ownerUUID != null && serverLevel.getServer().getPlayerList().getPlayer(ownerUUID) != null) {
+            body.getExtraItems().clear();
             return;
         }
         // Gather everything the body should drop into one list: the curio snapshot taken at logout,

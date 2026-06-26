@@ -1,6 +1,9 @@
 package com.norwood.openpersistence.client;
 
+import com.google.common.collect.LinkedHashMultimap;
 import com.mojang.authlib.GameProfile;
+import com.mojang.authlib.properties.Property;
+import com.mojang.authlib.properties.PropertyMap;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import com.norwood.openpersistence.OpenPersistenceConfig;
@@ -88,11 +91,23 @@ public class PersistentPlayerRenderer
         if (cached != null) {
             return cached;
         }
-        if (PENDING.add(uuid)) {
-            GameProfile profile = new GameProfile(uuid, entity.getPlayerName());
+        // Only fetch once the captured textures property has synced in; a bare uuid/name profile
+        // resolves to the default skin, and caching that would pin the body to Steve. If the data
+        // hasn't arrived yet we leave PENDING unset so a later frame retries.
+        String value = entity.getSkinTexture();
+        if (!value.isEmpty() && PENDING.add(uuid)) {
+            GameProfile profile = profileWithSkin(uuid, entity.getPlayerName(), value, entity.getSkinSignature());
             Minecraft.getInstance().getSkinManager().get(profile)
                     .thenAccept(opt -> opt.ifPresent(skin -> SKIN_CACHE.put(uuid, skin)));
         }
         return DefaultPlayerSkin.get(uuid);
+    }
+
+    /** Rebuilds the player's {@link GameProfile} with the {@code textures} property captured at logout,
+     *  so the skin lookup has something to unpack instead of falling back to the default skin. */
+    private static GameProfile profileWithSkin(UUID uuid, String name, String value, String signature) {
+        PropertyMap properties = new PropertyMap(LinkedHashMultimap.create());
+        properties.put("textures", new Property("textures", value, signature.isEmpty() ? null : signature));
+        return new GameProfile(uuid, name, properties);
     }
 }

@@ -1,6 +1,7 @@
 package com.norwood.openpersistence.client;
 
 import com.mojang.authlib.GameProfile;
+import com.mojang.authlib.properties.Property;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import com.norwood.openpersistence.entity.PersistentPlayerEntity;
@@ -97,8 +98,21 @@ public class PersistentPlayerRenderer extends LivingEntityRenderer<PersistentPla
                 return info.getSkin();
             }
         }
-        GameProfile profile = new GameProfile(uuid, entity.getPlayerName());
-        PlayerSkin skin = minecraft.getSkinManager().getInsecureSkin(profile);
+        PlayerSkin skin = minecraft.getSkinManager().getInsecureSkin(profileWithSkin(entity, uuid));
         return skin != null ? skin : DefaultPlayerSkin.get(uuid);
+    }
+
+    /** Rebuilds the player's {@link GameProfile}, re-attaching the {@code textures} property captured
+     *  at logout. Without the property {@code getInsecureSkin} only sees a bare uuid/name and returns
+     *  the default skin — which is why a logged-out body otherwise loses its skin. */
+    private static GameProfile profileWithSkin(PersistentPlayerEntity entity, UUID uuid) {
+        GameProfile profile = new GameProfile(uuid, entity.getPlayerName());
+        String value = entity.getSkinTexture();
+        if (!value.isEmpty()) {
+            String signature = entity.getSkinSignature();
+            profile.getProperties().put("textures",
+                    new Property("textures", value, signature.isEmpty() ? null : signature));
+        }
+        return profile;
     }
 }

@@ -1,5 +1,6 @@
 package com.norwood.openpersistence.entity;
 
+import com.mojang.authlib.properties.Property;
 import com.norwood.openpersistence.OpenPersistenceConfig;
 import com.norwood.openpersistence.platform.Services;
 import net.minecraft.nbt.CompoundTag;
@@ -23,6 +24,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -44,6 +46,13 @@ public class PersistentPlayerEntity extends PathfinderMob {
             SynchedEntityData.defineId(PersistentPlayerEntity.class, EntityDataSerializers.STRING);
     private static final EntityDataAccessor<Byte> PLAYER_MODEL =
             SynchedEntityData.defineId(PersistentPlayerEntity.class, EntityDataSerializers.BYTE);
+    /** Base64 {@code textures} property captured from the player at logout, so the body keeps the
+     *  real skin once the player has left and is no longer in the client's tab list. */
+    private static final EntityDataAccessor<String> SKIN_TEXTURE =
+            SynchedEntityData.defineId(PersistentPlayerEntity.class, EntityDataSerializers.STRING);
+    /** Mojang signature for {@link #SKIN_TEXTURE} ("" when unsigned, e.g. offline mode). */
+    private static final EntityDataAccessor<String> SKIN_SIGNATURE =
+            SynchedEntityData.defineId(PersistentPlayerEntity.class, EntityDataSerializers.STRING);
 
     /** Snapshot of the player's curio stacks at logout (NeoForge only); dropped on death. */
     private final List<ItemStack> extraItems = new ArrayList<>();
@@ -66,6 +75,7 @@ public class PersistentPlayerEntity extends PathfinderMob {
         PersistentPlayerEntity body = new PersistentPlayerEntity(ModEntities.PERSISTENT_PLAYER, player.level());
         body.setPlayerName(player.getGameProfile().getName());
         body.setPlayerUUID(player.getUUID());
+        captureSkin(body, player);
 
         for (EquipmentSlot slot : EquipmentSlot.values()) {
             body.setItemSlot(slot, player.getItemBySlot(slot).copy());
@@ -87,6 +97,17 @@ public class PersistentPlayerEntity extends PathfinderMob {
         body.setInvulnerable(player.isCreative());
         body.setPlayerModelByte(modelCustomisation(player));
         return body;
+    }
+
+    /** Copy the player's signed {@code textures} property (skin/cape) onto the body, if present.
+     *  Absent in offline mode, where no authenticated textures exist — the body then falls back to
+     *  the default skin, exactly like the player it mirrors. */
+    private static void captureSkin(PersistentPlayerEntity body, Player player) {
+        Collection<Property> textures = player.getGameProfile().getProperties().get("textures");
+        if (!textures.isEmpty()) {
+            Property texture = textures.iterator().next();
+            body.setSkinTexture(texture.value(), texture.signature());
+        }
     }
 
     private static byte modelCustomisation(Player player) {
@@ -135,6 +156,14 @@ public class PersistentPlayerEntity extends PathfinderMob {
     }
 
     @Override
+    public void tick() {
+        super.tick();
+        if (!level().isClientSide) {
+            com.norwood.openpersistence.PersistentPlayerManager.onBodyTick(this);
+        }
+    }
+
+    @Override
     public void die(net.minecraft.world.damagesource.DamageSource cause) {
         super.die(cause);
         if (!level().isClientSide) {
@@ -159,6 +188,8 @@ public class PersistentPlayerEntity extends PathfinderMob {
         builder.define(PLAYER_UUID, Optional.empty());
         builder.define(PLAYER_NAME, "");
         builder.define(PLAYER_MODEL, (byte) 0);
+        builder.define(SKIN_TEXTURE, "");
+        builder.define(SKIN_SIGNATURE, "");
     }
 
     public Optional<UUID> getPlayerUUID() {
@@ -189,6 +220,19 @@ public class PersistentPlayerEntity extends PathfinderMob {
         return (getPlayerModelByte() & part.getMask()) == part.getMask();
     }
 
+    public String getSkinTexture() {
+        return this.entityData.get(SKIN_TEXTURE);
+    }
+
+    public String getSkinSignature() {
+        return this.entityData.get(SKIN_SIGNATURE);
+    }
+
+    public void setSkinTexture(String value, String signature) {
+        this.entityData.set(SKIN_TEXTURE, value == null ? "" : value);
+        this.entityData.set(SKIN_SIGNATURE, signature == null ? "" : signature);
+    }
+
     // --- NBT ---------------------------------------------------------------------------------
 
     @Override
@@ -197,6 +241,8 @@ public class PersistentPlayerEntity extends PathfinderMob {
         getPlayerUUID().ifPresent(uuid -> tag.putUUID("PlayerUUID", uuid));
         tag.putString("PlayerName", getPlayerName());
         tag.putByte("PlayerModel", getPlayerModelByte());
+        tag.putString("SkinTexture", getSkinTexture());
+        tag.putString("SkinSignature", getSkinSignature());
 
         ListTag list = new ListTag();
         for (ItemStack stack : extraItems) {
@@ -215,6 +261,7 @@ public class PersistentPlayerEntity extends PathfinderMob {
         }
         setPlayerName(tag.getString("PlayerName"));
         setPlayerModelByte(tag.getByte("PlayerModel"));
+        setSkinTexture(tag.getString("SkinTexture"), tag.getString("SkinSignature"));
 
         extraItems.clear();
         ListTag list = tag.getList("ExtraItems", Tag.TAG_COMPOUND);

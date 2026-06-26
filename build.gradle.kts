@@ -96,6 +96,46 @@ fun org.gradle.api.Project.registerSecondClientRfg() {
     }
 }
 
+// Make the dev dedicated server start in offline mode so the unauthenticated dev clients (runClient /
+// runClient2 — "Player" and "Player2") can connect without a Mojang session. A default online-mode=true
+// server rejects them with "Failed to log in: Invalid session". Also accepts the EULA so the server can
+// start at all. Run directories are git-ignored and (re)generated, so we write the files in a doFirst
+// rather than committing them; existing keys are preserved and only online-mode is forced. `runServer`
+// (Loom/MDG/RFG) is a JavaExec subtype on every platform, so its workingDir is the server's game dir.
+fun org.gradle.api.Project.configureOfflineServer() {
+    tasks.matching { it.name == "runServer" }.configureEach {
+        val serverTask = this as org.gradle.api.tasks.JavaExec
+        doFirst {
+            // Resolve the server's actual game directory. Prism standardises Loom/MDG server runs to
+            // <projectDir>/runs/<version>/<loader>/server (the JavaExec working dir stays at the project
+            // root; the game dir is passed via --gameDir), whereas RetroFuturaGradle (1.12.2) runs with
+            // the game dir as its working dir. Writing to the wrong one is silently ignored by the server.
+            val workingDir = serverTask.workingDir
+            val gameDir = if (workingDir.name == "run") {
+                workingDir
+            } else {
+                java.io.File(workingDir, "runs/${project.parent?.name}/${project.name}/server")
+            }
+            gameDir.mkdirs()
+            java.io.File(gameDir, "eula.txt").writeText("eula=true\n")
+            val props = java.io.File(gameDir, "server.properties")
+            val settings = linkedMapOf<String, String>()
+            if (props.exists()) {
+                props.readLines().forEach { line ->
+                    val trimmed = line.trim()
+                    val eq = trimmed.indexOf('=')
+                    if (eq > 0 && !trimmed.startsWith("#")) {
+                        settings[trimmed.substring(0, eq)] = trimmed.substring(eq + 1)
+                    }
+                }
+            }
+            settings["online-mode"] = "false"
+            props.writeText(settings.entries.joinToString("\n") { "${it.key}=${it.value}" } + "\n")
+            serverTask.logger.lifecycle("Open Persistence: dev server forced to offline mode (online-mode=false) in {}", gameDir)
+        }
+    }
+}
+
 prism {
     metadata {
         modId = "openpersistence"
@@ -121,7 +161,7 @@ prism {
             fabricApi("0.116.9+1.21.1")
             // A second dev client (`runClient2`, logged in as "Player2") for testing persistent bodies.
             // No grave mod ships for Fabric, so this exercises the body mechanic itself (items scatter).
-            rawProject { registerSecondClientLoom() }
+            rawProject { registerSecondClientLoom(); configureOfflineServer() }
         }
         neoforge {
             loaderVersion = "21.1.222"
@@ -140,7 +180,7 @@ prism {
                 // modRuntimeOnly("curse.maven:gravestone-mod-238551:8056307")
             }
             // A second dev client (`runClient2`, logged in as "Player2") for testing persistent bodies.
-            rawProject { registerSecondClientMdg("neoForge") }
+            rawProject { registerSecondClientMdg("neoForge"); configureOfflineServer() }
         }
     }
 
@@ -150,7 +190,7 @@ prism {
             fabricApi("0.92.7+1.20.1")
             // A second dev client (`runClient2`, logged in as "Player2") for testing persistent bodies.
             // No grave mod ships for Fabric, so this exercises the body mechanic itself (items scatter).
-            rawProject { registerSecondClientLoom() }
+            rawProject { registerSecondClientLoom(); configureOfflineServer() }
         }
         forge {
             loaderVersion = "47.4.18"
@@ -168,7 +208,7 @@ prism {
                 // modRuntimeOnly("curse.maven:gravestone-mod-238551:7099725")
             }
             // A second dev client (`runClient2`, logged in as "Player2") for testing persistent bodies.
-            rawProject { registerSecondClientMdg("legacyForge") }
+            rawProject { registerSecondClientMdg("legacyForge"); configureOfflineServer() }
         }
     }
 
@@ -198,7 +238,7 @@ prism {
             // fully-configured `runClient` task — RFG recomputes the launch command from the task's own
             // properties at execution, so copying them (plus Prism's FML/GradleStart additions) and
             // overriding only the username + working directory yields an identical second client.
-            rawProject { registerSecondClientRfg() }
+            rawProject { registerSecondClientRfg(); configureOfflineServer() }
 
             dependencies {
                 // ModularWarfare (Shining fork) is compile-only soft compat, same as the
@@ -214,7 +254,7 @@ prism {
             fabricApi("0.145.2+26.1.1")
             // A second dev client (`runClient2`, logged in as "Player2") for testing persistent bodies.
             // No grave mod ships for Fabric, so this exercises the body mechanic itself (items scatter).
-            rawProject { registerSecondClientLoom() }
+            rawProject { registerSecondClientLoom(); configureOfflineServer() }
         }
         neoforge {
             loaderVersion = "26.1.1.0-beta"
@@ -232,7 +272,7 @@ prism {
                 // modRuntimeOnly("curse.maven:gravestone-mod-238551:8056350")
             }
             // A second dev client (`runClient2`, logged in as "Player2") for testing persistent bodies.
-            rawProject { registerSecondClientMdg("neoForge") }
+            rawProject { registerSecondClientMdg("neoForge"); configureOfflineServer() }
         }
     }
 
