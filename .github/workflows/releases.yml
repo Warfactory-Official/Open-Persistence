@@ -106,26 +106,55 @@ jobs:
         run: |
           set -euo pipefail
 
+          # Shared, descriptive User-Agent for both APIs.
+          UA="OpenPersistence-Release (+https://github.com/${GITHUB_REPOSITORY}; run ${GITHUB_RUN_ID})"
+
+          # api.curseforge.com sits behind CloudFront + AWS WAF, which intermittently returns bodiless
+          # 403s to shared CI IPs — a valid key can succeed on one request and be edge-blocked on the
+          # next (the "works once then 403" symptom). So every CurseForge read retries with backoff
+          # before the job gives up. A real auth failure returns a JSON body, which we surface below.
+          cf_get() {
+            local url="$1" attempt=1 max=6 out code body
+            while :; do
+              out=$(curl -sS -H "x-api-key: ${CURSEFORGE_API_KEY}" \
+                         -H "Accept: application/json" \
+                         -H "User-Agent: ${UA}" \
+                         -w $'\n%{http_code}' "$url") || true
+              code=${out##*$'\n'}
+              body=${out%$'\n'*}
+              [ "$code" = "200" ] && { printf '%s' "$body"; return 0; }
+              if [ "$attempt" -ge "$max" ]; then
+                echo "CurseForge GET failed after ${max} attempts (last HTTP ${code:-none}): $url" >&2
+                echo "Body snippet (empty => CloudFront/WAF edge block, not the key): ${body:0:300}" >&2
+                return 1
+              fi
+              echo "CurseForge GET HTTP ${code:-none} (attempt ${attempt}/${max}); backing off..." >&2
+              sleep $((attempt * 8))
+              attempt=$((attempt + 1))
+            done
+          }
+
           # Modrinth is keyed by version_number, which we make unique per target (<ver>+mc<mc>-<loader>).
           # No `|| true`: a failed lookup aborts the job rather than risk a duplicate upload.
-          mr_list=$(curl -fsSL "https://api.modrinth.com/v2/project/${MODRINTH_PROJECT_ID}/version" \
+          mr_list=$(curl -fsSL -H "User-Agent: ${UA}" \
+            "https://api.modrinth.com/v2/project/${MODRINTH_PROJECT_ID}/version" \
             | jq -r '.[].version_number')
           if printf '%s\n' "$mr_list" | grep -Fxq "$MR_VERSION"; then mr_have=yes; else mr_have=no; fi
 
           # CurseForge has no version_number; the file name (which embeds mc + loader + version) is the
           # unique key. The upload token can't read files, so this uses the separate Core API key and
-          # pages through the mod's files.
+          # pages through the mod's files, pacing requests to avoid tripping the rate-based WAF rule.
           cf_have=no
           index=0
           while :; do
-            page=$(curl -fsSL -H "x-api-key: ${CURSEFORGE_API_KEY}" \
-              "https://api.curseforge.com/v1/mods/${CURSEFORGE_PROJECT_ID}/files?pageSize=50&index=${index}")
+            page=$(cf_get "https://api.curseforge.com/v1/mods/${CURSEFORGE_PROJECT_ID}/files?pageSize=50&index=${index}")
             names=$(echo "$page" | jq -r '.data[].fileName')
             if printf '%s\n' "$names" | grep -Fxq "$JAR"; then cf_have=yes; break; fi
             count=$(echo "$page" | jq '.data | length')
             [ "$count" -lt 50 ] && break
             index=$((index + 50))
             [ "$index" -ge 2000 ] && break
+            sleep 1
           done
 
           publish_mr=$([ "$mr_have" = no ] && echo true || echo false)
