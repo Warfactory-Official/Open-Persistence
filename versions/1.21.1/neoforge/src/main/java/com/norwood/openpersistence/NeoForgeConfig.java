@@ -16,7 +16,7 @@ public final class NeoForgeConfig {
         builder.push("persistent_players");
         PERSIST_CREATIVE_PLAYERS = builder
                 .comment("If players in creative mode should leave a persistent body behind")
-                .define("persist_creative_players", true);
+                .define("persist_creative_players", false);
         OFFLINE_PLAYERS_SLEEP = builder
                 .comment("If offline persistent bodies should lie down (sleeping pose)")
                 .define("offline_players_sleep", false);

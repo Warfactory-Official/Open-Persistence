@@ -9,6 +9,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.tags.DamageTypeTags;
+import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
@@ -157,9 +159,14 @@ public class PersistentPlayerEntity extends PathfinderMob {
         }
     }
 
-    // Creative bodies are spawned with setInvulnerable(true); vanilla's isInvulnerableTo already
-    // makes them immune to everything except the void and /kill (the BYPASSES_INVULNERABILITY tag),
-    // which matches the original mod's behaviour, so no override is needed here.
+
+    @Override
+    public boolean isInvulnerableTo(DamageSource source) {
+        if (this.isInvulnerable() && !source.is(DamageTypeTags.BYPASSES_INVULNERABILITY)) {
+            return true;
+        }
+        return super.isInvulnerableTo(source);
+    }
 
     @Override
     public void tick() {

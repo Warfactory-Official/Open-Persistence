@@ -6,8 +6,8 @@ package com.norwood.openpersistence;
  */
 public final class OpenPersistenceConfig {
 
-    /** If players in creative mode should leave a persistent body behind. */
-    public static boolean persistCreativePlayers = true;
+    /** If players in creative mode should leave a persistent body behind. Off by default. */
+    public static boolean persistCreativePlayers = false;
 
     /** If offline persistent bodies should lie down (sleeping pose, smaller hitbox). */
     public static boolean offlinePlayersSleep = false;
