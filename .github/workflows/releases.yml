@@ -214,7 +214,7 @@ jobs:
 
       - name: Publish to CurseForge / Modrinth
         if: steps.dedup.outputs.skip != 'true'
-        uses: Kira-NT/mc-publish@v3.3.0
+        uses: Kira-NT/mc-publish@v3.3.1
         with:
           # An empty id makes mc-publish skip that platform, so a target already present on one
           # platform is only uploaded to the other.
