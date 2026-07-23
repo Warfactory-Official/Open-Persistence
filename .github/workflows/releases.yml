@@ -200,6 +200,7 @@ jobs:
           version-type: ${{ env.RELEASE_TYPE }}
           changelog-file: dist/notes.md
           loaders: ${{ matrix.loader }}
+          environment: client | server
           game-versions: "${{ matrix.game_versions }}"
           java: ${{ matrix.java }}
           retry-attempts: 3
