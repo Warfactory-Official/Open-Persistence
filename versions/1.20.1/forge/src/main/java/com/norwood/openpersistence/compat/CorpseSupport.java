@@ -32,7 +32,6 @@ final class CorpseSupport {
                 .build();
 
         CorpseEntity corpse = new CorpseEntity(level);
-        corpse.setDeath(death);
         corpse.setCorpseUUID(death.getPlayerUUID());
         corpse.setCorpseName(death.getPlayerName());
         corpse.setCorpseModel(death.getModel());
