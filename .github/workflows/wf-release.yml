@@ -27,7 +27,7 @@ jobs:
       - name: Build 1.20.1 Forge
         run: |
           chmod +x ./gradlew
-          ./gradlew :1.20.1:forge:build -PmodVersion=wf --no-daemon
+          ./gradlew :1.20.1:forge:build -PmodVersion=1.1.0 --no-daemon
 
       - name: Stage jar
         run: |
