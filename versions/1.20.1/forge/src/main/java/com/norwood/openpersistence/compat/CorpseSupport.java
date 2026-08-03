@@ -4,6 +4,8 @@ import de.maxhenkel.corpse.corelib.death.Death;
 import de.maxhenkel.corpse.entities.CorpseEntity;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.server.level.ServerPlayer;
+import com.mojang.authlib.GameProfile;
 
 import java.util.List;
 import java.util.UUID;
@@ -31,11 +33,10 @@ final class CorpseSupport {
                 .dimension(GraveDeaths.dimension(level))
                 .build();
 
-        CorpseEntity corpse = new CorpseEntity(level);
-        corpse.setCorpseUUID(death.getPlayerUUID());
-        corpse.setCorpseName(death.getPlayerName());
-        corpse.setCorpseModel(death.getModel());
-        corpse.setPos(x, Math.max(y, level.getMinBuildHeight()), z);
+        CorpseEntity corpse = CorpseEntity.createFromDeath(
+            new ServerPlayer(level.getServer(), level, new GameProfile(playerUUID, playerName == null ? "" : playerName)), 
+            death
+        );
         return level.addFreshEntity(corpse);
     }
 }
