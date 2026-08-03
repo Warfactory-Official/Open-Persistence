@@ -251,5 +251,6 @@ jobs:
             gh release create "$TAG" "$JAR_PATH" \
               --target "$GITHUB_SHA" \
               --title "$TITLE" \
-              --notes-file dist/notes.md
+              --notes-file dist/notes.md \
+              --latest=false
           fi
