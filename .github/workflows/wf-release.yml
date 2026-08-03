@@ -1,0 +1,45 @@
+name: WF Rolling Release
+
+on:
+  push:
+    tags: ['wf']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wf-release
+  cancel-in-progress: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: gradle
+
+      - name: Build 1.20.1 Forge
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :1.20.1:forge:build -PmodVersion=wf --no-daemon
+
+      - name: Stage jar
+        run: |
+          SRC=$(find versions/1.20.1/forge/build/libs -name '*.jar' ! -name '*-sources*' ! -name '*-dev*' | head -1)
+          cp "$SRC" openpersistence.jar
+
+      - name: Publish wf release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete wf --yes --cleanup-tag || true
+          gh release create wf openpersistence.jar \
+            --title "WF rolling release" \
+            --notes "Rolling pack release. Triggered by wf tag." \
+            --prerelease
