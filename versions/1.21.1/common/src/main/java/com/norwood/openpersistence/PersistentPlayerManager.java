@@ -23,13 +23,13 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Consumer;
-private static final String PENDING_DEATH_KEY = "OpenPersistencePendingDeath";
 
 /**
  * Server-side logic shared by all loaders: spawn a body on logout, restore the player on login,
  * keep the offline save in sync with the body, and drop the player's stuff when the body dies.
  */
 public final class PersistentPlayerManager {
+    private static final String PENDING_DEATH_KEY = "OpenPersistencePendingDeath";
 
     private PersistentPlayerManager() {
     }
