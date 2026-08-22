@@ -29,6 +29,7 @@ import java.util.function.Consumer;
  * keep the offline save in sync with the body, and drop the player's stuff when the body dies.
  */
 public final class PersistentPlayerManager {
+    private static final String PENDING_DEATH_KEY = "OpenPersistencePendingDeath";
 
     private PersistentPlayerManager() {
     }
@@ -42,9 +43,33 @@ public final class PersistentPlayerManager {
         if (body.isPresent()) {
             restorePlayer(body.get(), player);
             body.get().discard();
+        } else if (consumePendingDeath(server, player.getUUID())) {
+            player.kill(); // real hurt()->die() pipeline: proper death screen, no stuck animation
+            if (OpenPersistenceConfig.debug) {
+                Openpersistence.LOGGER.info("Completed offline death for {} on reconnect", player.getGameProfile().getName());
+            }
         } else if (OpenPersistenceConfig.debug) {
             Openpersistence.LOGGER.warn("No persistent body found for {}, vanilla spawn", player.getGameProfile().getName());
         }
+    }
+
+    private static boolean consumePendingDeath(MinecraftServer server, UUID uuid) {
+        Path playerDataDir = server.getWorldPath(LevelResource.PLAYER_DATA_DIR);
+        Path dataFile = playerDataDir.resolve(uuid + ".dat");
+        if (!Files.exists(dataFile)) {
+            return false;
+        }
+        try {
+            CompoundTag tag = NbtIo.readCompressed(dataFile, NbtAccounter.unlimitedHeap());
+            if (!tag.getBoolean(PENDING_DEATH_KEY)) {
+                return false;
+            }
+        } catch (Exception e) {
+            Openpersistence.LOGGER.error("Failed to read offline player data for {}", uuid, e);
+            return false;
+        }
+        updateOfflinePlayer(server, server.overworld(), uuid, offline -> {});
+        return true;
     }
 
     /**
@@ -116,6 +141,11 @@ public final class PersistentPlayerManager {
     }
 
     public static void syncBodyLocation(PersistentPlayerEntity body, Consumer<ServerPlayer> additional) {
+        syncBodyLocation(body, additional, null);
+    }
+
+    public static void syncBodyLocation(PersistentPlayerEntity body, Consumer<ServerPlayer> additional,
+                                        Consumer<CompoundTag> tagMutator) {
         if (!(body.level() instanceof ServerLevel level) || body.getPlayerUUID().isEmpty()) {
             return;
         }
@@ -125,7 +155,7 @@ public final class PersistentPlayerManager {
             if (additional != null) {
                 additional.accept(offline);
             }
-        });
+        }, tagMutator);
     }
 
     public static void onBodyDeath(PersistentPlayerEntity body) {
@@ -149,7 +179,6 @@ public final class PersistentPlayerManager {
         body.getExtraItems().clear();
 
         syncBodyLocation(body, offline -> {
-            offline.setHealth(0.0F);
             Services.CURIOS.clear(offline);
             Inventory inventory = offline.getInventory();
             for (int i = 0; i < inventory.getContainerSize(); i++) {
@@ -162,7 +191,7 @@ public final class PersistentPlayerManager {
             if (OpenPersistenceConfig.debug) {
                 Openpersistence.LOGGER.info("Persistent body for {} killed; {} stacks recovered", body.getPlayerName(), drops.size());
             }
-        });
+        }, out -> out.putBoolean(PENDING_DEATH_KEY, true));
 
         UUID playerUUID = body.getPlayerUUID().orElse(null);
         boolean stored = playerUUID != null && Services.GRAVE.deposit(
@@ -180,8 +209,12 @@ public final class PersistentPlayerManager {
      * APIs (mirroring vanilla {@code PlayerDataStorage}) so it works identically on every loader and
      * needs no access widening. NeoForge attachments (e.g. Curios) round-trip through the player tag.
      */
+    public static void updateOfflinePlayer(MinecraftServer server, ServerLevel level, UUID uuid, Consumer<ServerPlayer> consumer) {
+        updateOfflinePlayer(server, level, uuid, consumer, null);
+    }
+
     public static void updateOfflinePlayer(MinecraftServer server, ServerLevel level, UUID uuid,
-                                           Consumer<ServerPlayer> consumer) {
+                                        Consumer<ServerPlayer> consumer, Consumer<CompoundTag> tagMutator) {
         if (server.isSingleplayer()) {
             return;
         }
@@ -201,6 +234,9 @@ public final class PersistentPlayerManager {
             consumer.accept(offline);
 
             CompoundTag out = offline.saveWithoutId(new CompoundTag());
+            if (tagMutator != null) {
+                tagMutator.accept(out);
+            }
             NbtUtils.addCurrentDataVersion(out);
             Path tmp = Files.createTempFile(playerDataDir, uuid + "-", ".dat");
             NbtIo.writeCompressed(out, tmp);
