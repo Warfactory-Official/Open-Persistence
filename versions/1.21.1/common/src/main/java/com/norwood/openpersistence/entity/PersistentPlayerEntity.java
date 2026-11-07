@@ -1,5 +1,6 @@
 package com.norwood.openpersistence.entity;
 
+import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.properties.Property;
 import com.norwood.openpersistence.OpenPersistenceConfig;
 import com.norwood.openpersistence.platform.Services;
@@ -242,6 +243,17 @@ public class PersistentPlayerEntity extends PathfinderMob {
     public void setSkinTexture(String value, String signature) {
         this.entityData.set(SKIN_TEXTURE, value == null ? "" : value);
         this.entityData.set(SKIN_SIGNATURE, signature == null ? "" : signature);
+    }
+
+    /** Owner's profile with the skin captured at logout. */
+    public GameProfile profile() {
+        GameProfile profile = new GameProfile(getPlayerUUID().orElse(new UUID(0L, 0L)), getPlayerName());
+        String texture = getSkinTexture();
+        if (!texture.isEmpty()) {
+            String signature = getSkinSignature();
+            profile.getProperties().put("textures", new Property("textures", texture, signature.isEmpty() ? null : signature));
+        }
+        return profile;
     }
 
     // --- NBT ---------------------------------------------------------------------------------

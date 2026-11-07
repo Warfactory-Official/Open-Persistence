@@ -141,15 +141,18 @@ public final class PersistentPlayerManager {
             return;
         }
         List<ItemStack> drops = new ArrayList<>();
-        for (ItemStack stack : body.getExtraItems()) {
-            if (!stack.isEmpty()) {
-                drops.add(stack.copy());
-            }
-        }
-        body.getExtraItems().clear();
-
+        boolean[] claimed = {false};
         syncBodyLocation(body, offline -> {
             offline.setHealth(0.0F);
+            if (Services.GRAVE.claim(body, offline, body.profile())) {
+                claimed[0] = true;
+                return;
+            }
+            for (ItemStack stack : body.getExtraItems()) {
+                if (!stack.isEmpty()) {
+                    drops.add(stack.copy());
+                }
+            }
             Services.CURIOS.clear(offline);
             Inventory inventory = offline.getInventory();
             for (int i = 0; i < inventory.getContainerSize(); i++) {
@@ -163,6 +166,12 @@ public final class PersistentPlayerManager {
                 Openpersistence.LOGGER.info("Persistent body for {} killed; {} stacks recovered", body.getPlayerName(), drops.size());
             }
         });
+
+        body.getExtraItems().clear();
+        if (claimed[0]) {
+            body.discard();
+            return;
+        }
 
         UUID playerUUID = body.getPlayerUUID().orElse(null);
         boolean stored = playerUUID != null && Services.GRAVE.deposit(

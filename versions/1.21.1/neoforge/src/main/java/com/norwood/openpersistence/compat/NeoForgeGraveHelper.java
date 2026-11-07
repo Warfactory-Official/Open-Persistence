@@ -1,8 +1,11 @@
 package com.norwood.openpersistence.compat;
 
+import com.mojang.authlib.GameProfile;
 import com.norwood.openpersistence.Openpersistence;
 import com.norwood.openpersistence.platform.services.GraveHelper;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.fml.ModList;
 
@@ -11,7 +14,7 @@ import java.util.UUID;
 import java.util.function.BooleanSupplier;
 
 /**
- * NeoForge grave/corpse integration for GraveStone and Corpse
+ * NeoForge grave/corpse integration for GraveStone, Corpse and wflib corpses
  */
 public class NeoForgeGraveHelper implements GraveHelper {
 
@@ -47,6 +50,16 @@ public class NeoForgeGraveHelper implements GraveHelper {
         return false;
     }
 
+
+    @Override
+    public boolean claim(LivingEntity body, ServerPlayer offline, GameProfile profile) {
+        ModList list = ModList.get();
+        if (list == null || !list.isLoaded("wflib")) {
+            return false;
+        }
+        Boolean claimed = guardedDeposit("wflib", () -> WflibCorpseSupport.claim(body, offline, profile));
+        return claimed != null && claimed;
+    }
 
     private static Boolean guardedDeposit(String mod, BooleanSupplier deposit) {
         try {

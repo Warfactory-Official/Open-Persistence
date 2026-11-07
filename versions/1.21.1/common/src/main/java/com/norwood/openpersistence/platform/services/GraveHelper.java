@@ -1,6 +1,9 @@
 package com.norwood.openpersistence.platform.services;
 
+import com.mojang.authlib.GameProfile;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.List;
@@ -41,6 +44,16 @@ public interface GraveHelper {
      */
     default boolean deposit(ServerLevel level, double x, double y, double z,
                             UUID playerUUID, String playerName, List<ItemStack> items) {
+        return false;
+    }
+
+    /**
+     * Hand the whole offline player to a corpse mod that reads every slot itself (attachments included), before
+     * {@link #deposit}. {@code offline} is written back afterwards, so whatever the claimer removes stays removed.
+     *
+     * @return {@code true} if a corpse took everything; {@link #deposit} and the drop fallback are skipped
+     */
+    default boolean claim(LivingEntity body, ServerPlayer offline, GameProfile profile) {
         return false;
     }
 }

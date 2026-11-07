@@ -46,6 +46,8 @@ On Forge/NeoForge the helper detects whichever mod is installed and deposits via
 - **Corpse** — builds a corelib `Death` from the recovered items and spawns a `CorpseEntity` at the body's position.
 - **GraveStone** — builds the same `Death`, finds a free spot with `GraveUtils`, places the grave block, and stores the `Death` on its block entity.
 
+- **wflib** (1.21.1 NeoForge) — `GraveHelper.claim` runs first: the whole offline save goes to `Corpses.claim` (every slot, NeoForge attachments such as the worn backpack included), body becomes a ragdoll corpse; `deposit` skipped.
+
 Both mods coexist with this (if both are installed, Corpse is preferred). Each support class only references its mod's classes, so a server with neither mod — or only one — never hits a missing-class error. GraveStone/Corpse each shade their own copy of `corelib`, so no separate `corelib` dependency is needed; Corpse is pulled from Modrinth and GraveStone (CurseForge-only) from CurseMaven, both as **compile-only** soft deps.
 
 | | Implementation | Status |

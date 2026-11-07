@@ -198,7 +198,17 @@ prism {
                 // modRuntimeOnly("curse.maven:gravestone-mod-238551:8056307")
             }
             // A second dev client (`runClient2`, logged in as "Player2") for testing persistent bodies.
-            rawProject { registerSecondClientMdg("neoForge"); configureOfflineServer() }
+            rawProject {
+                registerSecondClientMdg("neoForge"); configureOfflineServer()
+                // wflib corpses (optional soft dep, compile-only). mavenLocal first: a local wflib build wins.
+                repositories {
+                    mavenLocal { content { includeGroup("com.wf.wflib") } }
+                    maven("https://repo.warfactory.co/snapshots") { content { includeGroup("com.wf.wflib") } }
+                }
+                dependencies {
+                    "compileOnly"("com.wf.wflib:wflib:1.8.38-SNAPSHOT") { isTransitive = false }
+                }
+            }
         }
     }
 
