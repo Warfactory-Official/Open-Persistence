@@ -2,6 +2,7 @@ package com.norwood.openpersistence.entity;
 
 import com.mojang.authlib.properties.Property;
 import com.norwood.openpersistence.OpenPersistenceConfig;
+import com.norwood.openpersistence.PersistentPlayerManager;
 import com.norwood.openpersistence.platform.Services;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -29,6 +30,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import net.minecraft.world.entity.player.PlayerModelPart;
 
 /**
  * A body left behind by a player who logged out of a multiplayer server. It looks like the
@@ -116,7 +118,7 @@ public class PersistentPlayerEntity extends PathfinderMob {
     /** Rebuild the worn-model-parts bitmask from the player's public {@code isModelPartShown}. */
     private static byte modelCustomisation(Player player) {
         byte mask = 0;
-        for (net.minecraft.world.entity.player.PlayerModelPart part : net.minecraft.world.entity.player.PlayerModelPart.values()) {
+        for (PlayerModelPart part : PlayerModelPart.values()) {
             if (player.isModelPartShown(part)) {
                 mask |= part.getMask();
             }
@@ -172,15 +174,15 @@ public class PersistentPlayerEntity extends PathfinderMob {
     public void tick() {
         super.tick();
         if (!level().isClientSide) {
-            com.norwood.openpersistence.PersistentPlayerManager.onBodyTick(this);
+            PersistentPlayerManager.onBodyTick(this);
         }
     }
 
     @Override
-    public void die(net.minecraft.world.damagesource.DamageSource cause) {
+    public void die(DamageSource cause) {
         super.die(cause);
         if (!level().isClientSide) {
-            com.norwood.openpersistence.PersistentPlayerManager.onBodyDeath(this);
+            PersistentPlayerManager.onBodyDeath(this);
         }
     }
 
@@ -229,7 +231,7 @@ public class PersistentPlayerEntity extends PathfinderMob {
         this.entityData.set(PLAYER_MODEL, value);
     }
 
-    public boolean isModelPartShown(net.minecraft.world.entity.player.PlayerModelPart part) {
+    public boolean isModelPartShown(PlayerModelPart part) {
         return (getPlayerModelByte() & part.getMask()) == part.getMask();
     }
 

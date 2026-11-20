@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Consumer;
+import net.minecraft.world.effect.MobEffectInstance;
 
 /**
  * Server-side logic shared by all loaders: spawn a body on logout, restore the player on login,
@@ -97,7 +98,7 @@ public final class PersistentPlayerManager {
         player.setAirSupply(body.getAirSupply());
         player.setRemainingFireTicks(body.getRemainingFireTicks());
         body.getActiveEffects().forEach(effect ->
-                player.addEffect(new net.minecraft.world.effect.MobEffectInstance(effect)));
+                player.addEffect(new MobEffectInstance(effect)));
 
         ServerLevel level = (ServerLevel) body.level();
         player.teleportTo(level, body.getX(), body.getY(), body.getZ(), body.getYRot(), body.getXRot());

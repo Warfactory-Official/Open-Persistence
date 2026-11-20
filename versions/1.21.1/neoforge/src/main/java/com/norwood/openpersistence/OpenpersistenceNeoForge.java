@@ -18,6 +18,7 @@ import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
 import java.util.function.Supplier;
+import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 
 @Mod(Openpersistence.MOD_ID)
 public class OpenpersistenceNeoForge {
@@ -45,7 +46,7 @@ public class OpenpersistenceNeoForge {
         NeoForge.EVENT_BUS.register(this);
     }
 
-    private void commonSetup(net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent event) {
+    private void commonSetup(FMLCommonSetupEvent event) {
         ModEntities.PERSISTENT_PLAYER = PERSISTENT_PLAYER.get();
     }
 

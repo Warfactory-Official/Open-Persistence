@@ -2,6 +2,7 @@ package com.norwood.openpersistence.entity;
 
 import com.mojang.authlib.properties.Property;
 import com.norwood.openpersistence.OpenPersistenceConfig;
+import com.norwood.openpersistence.PersistentPlayerManager;
 import com.norwood.openpersistence.platform.Services;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.chat.Component;
@@ -169,15 +170,15 @@ public class PersistentPlayerEntity extends PathfinderMob {
     public void tick() {
         super.tick();
         if (!level().isClientSide()) {
-            com.norwood.openpersistence.PersistentPlayerManager.onBodyTick(this);
+            PersistentPlayerManager.onBodyTick(this);
         }
     }
 
     @Override
-    public void die(net.minecraft.world.damagesource.DamageSource cause) {
+    public void die(DamageSource cause) {
         super.die(cause);
         if (!level().isClientSide()) {
-            com.norwood.openpersistence.PersistentPlayerManager.onBodyDeath(this);
+            PersistentPlayerManager.onBodyDeath(this);
         }
     }
 
