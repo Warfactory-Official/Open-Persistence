@@ -3,6 +3,7 @@ package com.norwood.openpersistence.platform.services;
 import com.mojang.authlib.GameProfile;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 
@@ -55,5 +56,10 @@ public interface GraveHelper {
      */
     default boolean claim(LivingEntity body, ServerPlayer offline, GameProfile profile) {
         return false;
+    }
+
+    /** Runs {@code work} (spawns next to {@code body}) on the thread that ticks it; inline without a region host. */
+    default void onOwner(Entity body, Runnable work) {
+        work.run();
     }
 }

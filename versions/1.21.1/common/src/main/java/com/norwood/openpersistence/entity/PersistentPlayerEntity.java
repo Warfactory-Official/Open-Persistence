@@ -60,7 +60,13 @@ public class PersistentPlayerEntity extends PathfinderMob {
     private static final EntityDataAccessor<String> SKIN_SIGNATURE =
             SynchedEntityData.defineId(PersistentPlayerEntity.class, EntityDataSerializers.STRING);
 
+    private static final EntityDataAccessor<ItemStack> BACKPACK =
+            SynchedEntityData.defineId(PersistentPlayerEntity.class, EntityDataSerializers.ITEM_STACK);
+
     /** Snapshot of the player's curio stacks at logout (NeoForge only); dropped on death. */
+    private static final EquipmentSlot[] ARMOR_SLOTS =
+            {EquipmentSlot.FEET, EquipmentSlot.LEGS, EquipmentSlot.CHEST, EquipmentSlot.HEAD};
+
     private final List<ItemStack> extraItems = new ArrayList<>();
     /** Set once the owner got this body's state back; exactly one restorer wins. */
     private final AtomicBoolean claimed = new AtomicBoolean();
@@ -91,6 +97,7 @@ public class PersistentPlayerEntity extends PathfinderMob {
 
         body.extraItems.clear();
         body.extraItems.addAll(Services.CURIOS.snapshot(player));
+        body.setBackpack(Services.CURIOS.backpack(player));
 
         body.moveTo(player.getX(), player.getY(), player.getZ(), player.getYRot(), player.getXRot());
         body.yHeadRot = player.yHeadRot;
@@ -143,11 +150,28 @@ public class PersistentPlayerEntity extends PathfinderMob {
             copies.add(new MobEffectInstance(effect));
         }
         return new Restore(level, getX(), getY(), getZ(), getYRot(), getXRot(), getHealth(), getAirSupply(),
-                getRemainingFireTicks(), copies);
+                getRemainingFireTicks(), copies, wornArmor());
     }
 
+    /** Armour as worn now: plate/garment wear and inserts changed on the body, which the offline save never saw. */
+    private List<ItemStack> wornArmor() {
+        List<ItemStack> worn = new ArrayList<>(ARMOR_SLOTS.length);
+        for (EquipmentSlot slot : ARMOR_SLOTS) {
+            worn.add(getItemBySlot(slot).copy());
+        }
+        return worn;
+    }
+
+    /** {@code player}'s armour slots := the body's. */
+    public static void applyArmor(Player player, List<ItemStack> armor) {
+        for (int i = 0; i < ARMOR_SLOTS.length; i++) {
+            player.getInventory().armor.set(ARMOR_SLOTS[i].getIndex(), armor.get(i).copy());
+        }
+    }
+
+    /** {@code armor}: {@link #ARMOR_SLOTS} order. */
     public record Restore(ServerLevel level, double x, double y, double z, float yRot, float xRot, float health,
-                          int air, int fire, List<MobEffectInstance> effects) {
+                          int air, int fire, List<MobEffectInstance> effects, List<ItemStack> armor) {
     }
 
     public boolean isOfflineSleeping() {
@@ -229,6 +253,15 @@ public class PersistentPlayerEntity extends PathfinderMob {
         builder.define(PLAYER_MODEL, (byte) 0);
         builder.define(SKIN_TEXTURE, "");
         builder.define(SKIN_SIGNATURE, "");
+        builder.define(BACKPACK, ItemStack.EMPTY);
+    }
+
+    public ItemStack getBackpack() {
+        return this.entityData.get(BACKPACK);
+    }
+
+    public void setBackpack(ItemStack stack) {
+        this.entityData.set(BACKPACK, stack);
     }
 
     public Optional<UUID> getPlayerUUID() {
@@ -293,6 +326,9 @@ public class PersistentPlayerEntity extends PathfinderMob {
         tag.putByte("PlayerModel", getPlayerModelByte());
         tag.putString("SkinTexture", getSkinTexture());
         tag.putString("SkinSignature", getSkinSignature());
+        if (!getBackpack().isEmpty()) {
+            tag.put("Backpack", getBackpack().save(this.registryAccess()));
+        }
 
         ListTag list = new ListTag();
         for (ItemStack stack : extraItems) {
@@ -312,6 +348,7 @@ public class PersistentPlayerEntity extends PathfinderMob {
         setPlayerName(tag.getString("PlayerName"));
         setPlayerModelByte(tag.getByte("PlayerModel"));
         setSkinTexture(tag.getString("SkinTexture"), tag.getString("SkinSignature"));
+        setBackpack(ItemStack.parseOptional(this.registryAccess(), tag.getCompound("Backpack")));
 
         extraItems.clear();
         ListTag list = tag.getList("ExtraItems", Tag.TAG_COMPOUND);

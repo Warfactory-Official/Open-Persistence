@@ -4,6 +4,7 @@ import com.norwood.openpersistence.Openpersistence;
 import com.norwood.openpersistence.OpenpersistenceNeoForge;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.ModList;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.EntityRenderersEvent;
 
@@ -16,5 +17,12 @@ public final class OpenpersistenceNeoForgeClient {
     @SubscribeEvent
     public static void onRegisterRenderers(EntityRenderersEvent.RegisterRenderers event) {
         event.registerEntityRenderer(OpenpersistenceNeoForge.PERSISTENT_PLAYER.get(), PersistentPlayerRenderer::new);
+    }
+
+    @SubscribeEvent
+    public static void onAddLayers(EntityRenderersEvent.AddLayers event) {
+        if (ModList.get().isLoaded("wflib")) {
+            WflibBodyLayers.add(event, OpenpersistenceNeoForge.PERSISTENT_PLAYER.get());
+        }
     }
 }

@@ -130,6 +130,7 @@ public final class PersistentPlayerManager {
 
     private static void restorePlayer(PersistentPlayerEntity.Restore state, ServerPlayer player) {
         player.setHealth(state.health());
+        PersistentPlayerEntity.applyArmor(player, state.armor());
         player.setAirSupply(state.air());
         player.setRemainingFireTicks(state.fire());
         for (MobEffectInstance effect : state.effects()) {
@@ -170,8 +171,10 @@ public final class PersistentPlayerManager {
         }
         List<ItemStack> drops = new ArrayList<>();
         boolean[] claimed = {false};
+        PersistentPlayerEntity.Restore worn = body.restoreState(serverLevel);
         syncBodyLocation(body, offline -> {
             offline.setHealth(0.0F);
+            PersistentPlayerEntity.applyArmor(offline, worn.armor());
             if (Services.GRAVE.claim(body, offline, body.profile())) {
                 claimed[0] = true;
                 return;
@@ -197,18 +200,20 @@ public final class PersistentPlayerManager {
 
         body.getExtraItems().clear();
         if (claimed[0]) {
-            body.discard();
+            body.claim();
             return;
         }
 
-        UUID playerUUID = body.getPlayerUUID().orElse(null);
-        boolean stored = playerUUID != null && Services.GRAVE.deposit(
-                serverLevel, body.getX(), body.getY(), body.getZ(), playerUUID, body.getPlayerName(), drops);
-        if (!stored) {
-            for (ItemStack stack : drops) {
-                body.spawnAtLocation(stack);
+        Services.GRAVE.onOwner(body, () -> {
+            UUID playerUUID = body.getPlayerUUID().orElse(null);
+            boolean stored = playerUUID != null && Services.GRAVE.deposit(
+                    serverLevel, body.getX(), body.getY(), body.getZ(), playerUUID, body.getPlayerName(), drops);
+            if (!stored) {
+                for (ItemStack stack : drops) {
+                    body.spawnAtLocation(stack);
+                }
             }
-        }
+        });
     }
 
     /**

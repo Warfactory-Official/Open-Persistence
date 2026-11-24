@@ -48,6 +48,14 @@ On Forge/NeoForge the helper detects whichever mod is installed and deposits via
 
 - **wflib** (1.21.1 NeoForge) — `GraveHelper.claim` runs first: the whole offline save goes to `Corpses.claim` (every slot, NeoForge attachments such as the worn backpack included), body becomes a ragdoll corpse; `deposit` skipped.
 
+### WF stack (wflib 1.21.1 NeoForge, soft)
+
+- Armour: body = `LivingEntity` => wflib `ArmorResolution` runs on `LivingIncomingDamageEvent` (whole-entity door; AHF banded parts). Wear lands on the body's stacks => `restoreState` carries armour slots; applied to the offline save on death (before `claim`) and to the player on rejoin.
+- WFMedical: owns hits on the body (`BODY_CLAIMS`); trauma + hp via `MedicalEffects.applyToBody`. Profile copy logout/login in WFMedical `persistence`.
+- Backpack: worn `wflib:backpack` synced to the body (`PersistentPlayerEntity.getBackpack`, contents stripped), drawn by `WflibBodyLayers`.
+- Corpse: killed body -> `claim` -> body marked claimed, discarded by its own tick; corpse spawn + ragdoll hand-off routed through `HitRouter` (region owner of the body).
+- Gaps: body never ragdolls while alive; AHF envelope hit registration for the body only via WFMedical (`AhfHooks.addEnvelopeTarget`); exo armour state/energy not mirrored; carry (`Carry.BODY`) of a live body unsupported.
+
 Both mods coexist with this (if both are installed, Corpse is preferred). Each support class only references its mod's classes, so a server with neither mod — or only one — never hits a missing-class error. GraveStone/Corpse each shade their own copy of `corelib`, so no separate `corelib` dependency is needed; Corpse is pulled from Modrinth and GraveStone (CurseForge-only) from CurseMaven, both as **compile-only** soft deps.
 
 | | Implementation | Status |

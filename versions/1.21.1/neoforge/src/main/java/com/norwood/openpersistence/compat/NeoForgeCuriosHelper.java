@@ -2,6 +2,7 @@ package com.norwood.openpersistence.compat;
 
 import com.norwood.openpersistence.platform.services.CuriosHelper;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.fml.ModList;
 import net.neoforged.neoforge.items.IItemHandlerModifiable;
@@ -34,6 +35,12 @@ public class NeoForgeCuriosHelper implements CuriosHelper {
             }
         });
         return stacks;
+    }
+
+    @Override
+    public ItemStack backpack(LivingEntity entity) {
+        return entity instanceof Player player && ModList.get().isLoaded("wflib")
+                ? WflibBodySupport.backpack(player) : ItemStack.EMPTY;
     }
 
     @Override

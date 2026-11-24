@@ -5,6 +5,7 @@ import com.norwood.openpersistence.Openpersistence;
 import com.norwood.openpersistence.platform.services.GraveHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.fml.ModList;
@@ -59,6 +60,15 @@ public class NeoForgeGraveHelper implements GraveHelper {
         }
         Boolean claimed = guardedDeposit("wflib", () -> WflibCorpseSupport.claim(body, offline, profile));
         return claimed != null && claimed;
+    }
+
+    @Override
+    public void onOwner(Entity body, Runnable work) {
+        if (ModList.get().isLoaded("wflib")) {
+            WflibCorpseSupport.onOwner(body, work);
+        } else {
+            work.run();
+        }
     }
 
     private static Boolean guardedDeposit(String mod, BooleanSupplier deposit) {

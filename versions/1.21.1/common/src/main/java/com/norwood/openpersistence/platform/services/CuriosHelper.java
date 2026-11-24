@@ -26,6 +26,11 @@ public interface CuriosHelper {
         return Collections.emptyList();
     }
 
+    /** Worn backpack as trackers see it (contents stripped), for the body's model; empty without a backpack mod. */
+    default ItemStack backpack(LivingEntity entity) {
+        return ItemStack.EMPTY;
+    }
+
     /** Empty every curio slot of the entity (used on the offline player when the body dies). */
     default void clear(LivingEntity entity) {
     }
