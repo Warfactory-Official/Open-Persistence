@@ -150,22 +150,6 @@ public class PersistentPlayerEntity extends PathfinderMob {
                           int air, int fire, List<MobEffectInstance> effects) {
     }
 
-    @Override
-    public void onAddedToLevel() {
-        super.onAddedToLevel();
-        if (!level().isClientSide) {
-            PersistentPlayerManager.bodyLoaded(this);
-        }
-    }
-
-    @Override
-    public void onRemovedFromLevel() {
-        super.onRemovedFromLevel();
-        if (!level().isClientSide) {
-            PersistentPlayerManager.bodyUnloaded(this);
-        }
-    }
-
     public boolean isOfflineSleeping() {
         return OpenPersistenceConfig.offlinePlayersSleep;
     }

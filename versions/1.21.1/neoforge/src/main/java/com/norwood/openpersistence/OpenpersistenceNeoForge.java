@@ -14,6 +14,8 @@ import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.event.config.ModConfigEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.entity.EntityAttributeCreationEvent;
+import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
+import net.neoforged.neoforge.event.entity.EntityLeaveLevelEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
@@ -71,6 +73,20 @@ public class OpenpersistenceNeoForge {
     public void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
             PersistentPlayerManager.onPlayerLogout(player);
+        }
+    }
+
+    @SubscribeEvent
+    public void onBodyJoin(EntityJoinLevelEvent event) {
+        if (!event.getLevel().isClientSide && event.getEntity() instanceof PersistentPlayerEntity body) {
+            PersistentPlayerManager.bodyLoaded(body);
+        }
+    }
+
+    @SubscribeEvent
+    public void onBodyLeave(EntityLeaveLevelEvent event) {
+        if (!event.getLevel().isClientSide && event.getEntity() instanceof PersistentPlayerEntity body) {
+            PersistentPlayerManager.bodyUnloaded(body);
         }
     }
 }

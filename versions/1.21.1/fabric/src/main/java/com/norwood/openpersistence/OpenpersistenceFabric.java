@@ -3,6 +3,7 @@ package com.norwood.openpersistence;
 import com.norwood.openpersistence.entity.ModEntities;
 import com.norwood.openpersistence.entity.PersistentPlayerEntity;
 import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry;
 import net.minecraft.core.Registry;
@@ -34,5 +35,15 @@ public class OpenpersistenceFabric implements ModInitializer {
                 PersistentPlayerManager.onPlayerLogin(handler.player));
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) ->
                 PersistentPlayerManager.onPlayerLogout(handler.player));
+        ServerEntityEvents.ENTITY_LOAD.register((entity, level) -> {
+            if (entity instanceof PersistentPlayerEntity body) {
+                PersistentPlayerManager.bodyLoaded(body);
+            }
+        });
+        ServerEntityEvents.ENTITY_UNLOAD.register((entity, level) -> {
+            if (entity instanceof PersistentPlayerEntity body) {
+                PersistentPlayerManager.bodyUnloaded(body);
+            }
+        });
     }
 }

@@ -32,7 +32,7 @@ import net.minecraft.world.effect.MobEffectInstance;
  */
 public final class PersistentPlayerManager {
 
-    /** Loaded bodies by owner; maintained by the body's level add/remove callbacks. */
+    /** Loaded bodies by owner; maintained by loader level join/leave events. */
     private static final ConcurrentHashMap<UUID, PersistentPlayerEntity> BODIES = new ConcurrentHashMap<>();
     /** Owners online; written on the main thread, read from body ticks (PlayerList is main-thread only). */
     private static final Set<UUID> ONLINE = ConcurrentHashMap.newKeySet();
