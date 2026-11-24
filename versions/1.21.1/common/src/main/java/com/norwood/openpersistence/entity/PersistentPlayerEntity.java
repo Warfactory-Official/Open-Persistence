@@ -15,6 +15,7 @@ import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.PathfinderMob;
@@ -32,6 +33,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * A body left behind by a player who logged out of a multiplayer server. It looks like the
@@ -60,6 +62,8 @@ public class PersistentPlayerEntity extends PathfinderMob {
 
     /** Snapshot of the player's curio stacks at logout (NeoForge only); dropped on death. */
     private final List<ItemStack> extraItems = new ArrayList<>();
+    /** Set once the owner got this body's state back; exactly one restorer wins. */
+    private final AtomicBoolean claimed = new AtomicBoolean();
 
     public PersistentPlayerEntity(EntityType<? extends PathfinderMob> type, Level level) {
         super(type, level);
@@ -122,6 +126,44 @@ public class PersistentPlayerEntity extends PathfinderMob {
             }
         }
         return mask;
+    }
+
+    public boolean claim() {
+        return claimed.compareAndSet(false, true);
+    }
+
+    public boolean isClaimed() {
+        return claimed.get();
+    }
+
+    /** Immutable copy of what the owner gets back on rejoin; safe to hand to another thread. */
+    public Restore restoreState(ServerLevel level) {
+        List<MobEffectInstance> copies = new ArrayList<>();
+        for (MobEffectInstance effect : getActiveEffects()) {
+            copies.add(new MobEffectInstance(effect));
+        }
+        return new Restore(level, getX(), getY(), getZ(), getYRot(), getXRot(), getHealth(), getAirSupply(),
+                getRemainingFireTicks(), copies);
+    }
+
+    public record Restore(ServerLevel level, double x, double y, double z, float yRot, float xRot, float health,
+                          int air, int fire, List<MobEffectInstance> effects) {
+    }
+
+    @Override
+    public void onAddedToLevel() {
+        super.onAddedToLevel();
+        if (!level().isClientSide) {
+            PersistentPlayerManager.bodyLoaded(this);
+        }
+    }
+
+    @Override
+    public void onRemovedFromLevel() {
+        super.onRemovedFromLevel();
+        if (!level().isClientSide) {
+            PersistentPlayerManager.bodyUnloaded(this);
+        }
     }
 
     public boolean isOfflineSleeping() {

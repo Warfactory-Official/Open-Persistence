@@ -20,8 +20,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import net.minecraft.world.effect.MobEffectInstance;
 
@@ -31,7 +32,29 @@ import net.minecraft.world.effect.MobEffectInstance;
  */
 public final class PersistentPlayerManager {
 
+    /** Loaded bodies by owner; maintained by the body's level add/remove callbacks. */
+    private static final ConcurrentHashMap<UUID, PersistentPlayerEntity> BODIES = new ConcurrentHashMap<>();
+    /** Owners online; written on the main thread, read from body ticks (PlayerList is main-thread only). */
+    private static final Set<UUID> ONLINE = ConcurrentHashMap.newKeySet();
+
     private PersistentPlayerManager() {
+    }
+
+    public static void bodyLoaded(PersistentPlayerEntity body) {
+        body.getPlayerUUID().ifPresent(uuid -> BODIES.put(uuid, body));
+    }
+
+    public static void bodyUnloaded(PersistentPlayerEntity body) {
+        body.getPlayerUUID().ifPresent(uuid -> BODIES.remove(uuid, body));
+    }
+
+    /** Main thread inline; from a region worker, queued to the main thread. */
+    private static void onMain(MinecraftServer server, Runnable task) {
+        if (server.isSameThread()) {
+            task.run();
+        } else {
+            server.execute(task);
+        }
     }
 
     public static void onPlayerLogin(ServerPlayer player) {
@@ -39,23 +62,23 @@ public final class PersistentPlayerManager {
         if (server == null || server.isSingleplayer()) {
             return;
         }
-        Optional<PersistentPlayerEntity> body = findBody(server, player.getUUID());
-        if (body.isPresent()) {
-            restorePlayer(body.get(), player);
-            body.get().discard();
+        ONLINE.add(player.getUUID());
+        PersistentPlayerEntity body = BODIES.get(player.getUUID());
+        if (body != null) {
+            if (body.claim()) {
+                restorePlayer(body, player);
+            }
         } else if (OpenPersistenceConfig.debug) {
             Openpersistence.LOGGER.warn("No persistent body found for {}, vanilla spawn", player.getGameProfile().getName());
         }
     }
 
-    /**
-     * Driven by the body's own server tick. The login event removes the body when it is already
-     * loaded, but if the owner rejoined before their chunk (and the body in it) finished loading,
-     * that event ran too early and missed it — leaving a body that can be killed while the owner is
-     * back online, duplicating their items. Removing the body as soon as it ticks with its owner
-     * online closes that window on every loader.
-     */
+    /** Driven by the body's own server tick; owner-online check closes the rejoin-before-chunk-load window. */
     public static void onBodyTick(PersistentPlayerEntity body) {
+        if (body.isClaimed()) {
+            body.discard();
+            return;
+        }
         if (!(body.level() instanceof ServerLevel level)) {
             return;
         }
@@ -63,16 +86,24 @@ public final class PersistentPlayerManager {
         if (server == null || server.isSingleplayer()) {
             return;
         }
-        body.getPlayerUUID().ifPresent(uuid -> {
-            ServerPlayer owner = server.getPlayerList().getPlayer(uuid);
-            if (owner != null) {
-                restorePlayer(body, owner);
-                body.discard();
-            }
-        });
+        UUID uuid = body.getPlayerUUID().orElse(null);
+        if (uuid == null || !ONLINE.contains(uuid)) {
+            return;
+        }
+        if (body.claim()) {
+            PersistentPlayerEntity.Restore state = body.restoreState(level);
+            onMain(server, () -> {
+                ServerPlayer owner = server.getPlayerList().getPlayer(uuid);
+                if (owner != null) {
+                    restorePlayer(state, owner);
+                }
+            });
+        }
+        body.discard();
     }
 
     public static void onPlayerLogout(ServerPlayer player) {
+        ONLINE.remove(player.getUUID());
         if (!canPersist(player)) {
             return;
         }
@@ -94,26 +125,17 @@ public final class PersistentPlayerManager {
     }
 
     private static void restorePlayer(PersistentPlayerEntity body, ServerPlayer player) {
-        player.setHealth(body.getHealth());
-        player.setAirSupply(body.getAirSupply());
-        player.setRemainingFireTicks(body.getRemainingFireTicks());
-        body.getActiveEffects().forEach(effect ->
-                player.addEffect(new MobEffectInstance(effect)));
-
-        ServerLevel level = (ServerLevel) body.level();
-        player.teleportTo(level, body.getX(), body.getY(), body.getZ(), body.getYRot(), body.getXRot());
+        restorePlayer(body.restoreState((ServerLevel) body.level()), player);
     }
 
-    public static Optional<PersistentPlayerEntity> findBody(MinecraftServer server, UUID playerUUID) {
-        for (ServerLevel level : server.getAllLevels()) {
-            for (var entity : level.getAllEntities()) {
-                if (entity instanceof PersistentPlayerEntity body
-                        && body.getPlayerUUID().map(playerUUID::equals).orElse(false)) {
-                    return Optional.of(body);
-                }
-            }
+    private static void restorePlayer(PersistentPlayerEntity.Restore state, ServerPlayer player) {
+        player.setHealth(state.health());
+        player.setAirSupply(state.air());
+        player.setRemainingFireTicks(state.fire());
+        for (MobEffectInstance effect : state.effects()) {
+            player.addEffect(new MobEffectInstance(effect));
         }
-        return Optional.empty();
+        player.teleportTo(state.level(), state.x(), state.y(), state.z(), state.yRot(), state.xRot());
     }
 
     public static void syncBodyLocation(PersistentPlayerEntity body, Consumer<ServerPlayer> additional) {
@@ -133,11 +155,16 @@ public final class PersistentPlayerManager {
         if (!(body.level() instanceof ServerLevel serverLevel)) {
             return;
         }
+        onMain(serverLevel.getServer(), () -> dropContents(body, serverLevel));
+    }
+
+    /** Main thread: offline save IO, {@code ServerPlayer} construction (loads chunks), grave/item placement. */
+    private static void dropContents(PersistentPlayerEntity body, ServerLevel serverLevel) {
         // Dupe guard: if the owner is already back online they still hold their inventory, so dropping
         // the body's saved copy would duplicate it. The body removes itself on rejoin (onBodyTick);
         // this covers the race where it is killed in the tick before that happens.
         UUID ownerUUID = body.getPlayerUUID().orElse(null);
-        if (ownerUUID != null && serverLevel.getServer().getPlayerList().getPlayer(ownerUUID) != null) {
+        if (body.isClaimed() || ownerUUID != null && ONLINE.contains(ownerUUID)) {
             body.getExtraItems().clear();
             return;
         }
